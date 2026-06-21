@@ -217,3 +217,57 @@ button { font-family: inherit; }
   #flash.fire { animation: none; }
   .screen { animation: none; }
 }
+
+/* ── フェーズ2：メンバー・記録・選手選択 ── */
+.util-row { display: flex; gap: 10px; margin-top: 20px; }
+.util-row .ghost { flex: 1; text-align: center; padding: 12px; }
+
+.field select {
+  width: 100%; padding: 14px; font-size: 18px; border-radius: 12px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+}
+.frow { display: flex; gap: 12px; }
+.frow .field { flex: 1; }
+
+/* 記録者：選手の自動表示 */
+.rec-swimmer {
+  background: var(--blue-soft); border: 1px solid var(--line); border-radius: 12px;
+  padding: 12px 14px; margin: 0 0 14px; font-size: 18px;
+}
+.rec-swimmer b { color: var(--blue-deep); }
+.auto-tag { margin-left: 8px; font-size: 12px; color: #fff; background: var(--blue); padding: 2px 8px; border-radius: 999px; }
+.rec-swimmer-name { text-align: center; font-size: 22px; font-weight: 800; color: var(--blue-deep); margin: 2px 0 0; }
+#btn-save { margin-top: 6px; }
+.saved-msg { text-align: center; color: var(--green); font-weight: 700; margin-top: 8px; }
+
+/* メンバー一覧 */
+.mform { margin-bottom: 16px; }
+.member-row {
+  display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; align-items: center;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  padding: 10px 12px; margin-bottom: 8px; box-shadow: var(--shadow);
+}
+.member-row .m-main { grid-column: 1; display: flex; align-items: center; gap: 8px; }
+.m-name { font-size: 17px; font-weight: 700; }
+.member-row .m-sub { grid-column: 1; grid-row: 2; color: var(--muted); font-size: 13px; }
+.member-row .del {
+  grid-column: 2; grid-row: 1 / span 2; align-self: center;
+  background: transparent; border: 1px solid var(--line); color: var(--red);
+  border-radius: 8px; padding: 8px 12px; font-size: 14px; cursor: pointer;
+}
+.tag.guest { font-size: 11px; color: #fff; background: var(--orange); padding: 2px 8px; border-radius: 999px; }
+.empty { color: var(--muted); text-align: center; padding: 24px 0; }
+
+/* 記録一覧 */
+.rlist { display: grid; gap: 8px; }
+.record-row {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  padding: 10px 12px; box-shadow: var(--shadow);
+}
+.r-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.r-final { font-size: 22px; font-weight: 800; color: var(--blue-deep); font-variant-numeric: tabular-nums; }
+.r-name { font-weight: 700; }
+.r-meta { color: var(--muted); font-size: 13px; }
+.r-sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
+.r-laps { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.chip { font-size: 12px; color: var(--blue-deep); background: var(--blue-soft); border-radius: 999px; padding: 2px 8px; font-variant-numeric: tabular-nums; }
