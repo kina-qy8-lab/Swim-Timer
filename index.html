@@ -217,7 +217,7 @@
       <header class="bar">
         <button class="ghost back" data-back>← 戻る</button>
         <span class="bar-title">記録</span>
-        <span class="spacer"></span>
+        <button class="ghost" id="btn-manual">＋追加</button>
       </header>
       <div class="seg recmode" id="rec-mode">
         <button data-rmode="indiv" class="on">個人</button>
@@ -284,6 +284,56 @@
         <div class="chart-wrap"><canvas id="chart-lap"></canvas></div>
         <div class="splits" id="ana-splits"></div>
       </div>
+    </section>
+
+    <!-- 記録の手動追加 -->
+    <section id="screen-manual" class="screen" hidden>
+      <header class="bar">
+        <button class="ghost" data-back-manual>← 戻る</button>
+        <span class="bar-title">記録を手動追加</span>
+        <span class="spacer"></span>
+      </header>
+
+      <div class="seg" id="manual-kind">
+        <button data-kind="indiv" class="on">個人</button>
+        <button data-kind="relay">リレー</button>
+      </div>
+
+      <div class="frow">
+        <label class="field"><span>日付</span><input id="manual-date" type="date" /></label>
+        <label class="field"><span>コース</span>
+          <div class="seg" id="manual-course"><button data-pool="25" class="on">短水路</button><button data-pool="50">長水路</button></div>
+        </label>
+      </div>
+
+      <label class="field"><span>大会名（任意）</span><input id="manual-meet" type="text" placeholder="例）県新人大会（空欄＝練習）" /></label>
+
+      <div class="frow">
+        <label class="field"><span>種目</span><select id="manual-stroke"></select></label>
+        <label class="field" id="manual-dist-field" hidden><span>距離</span><select id="manual-dist"></select></label>
+      </div>
+
+      <label class="field" id="manual-single"><span>選手</span>
+        <select id="manual-swimmer"></select>
+      </label>
+      <label class="field" id="manual-name-field" hidden><span>選手名（直接入力）</span><input id="manual-name" type="text" placeholder="氏名" /></label>
+
+      <div id="manual-relay" hidden>
+        <div class="sec-title">泳者</div>
+        <div id="manual-legs"></div>
+      </div>
+
+      <div class="sec-title">ラップ（通過タイム・累計）</div>
+      <div class="lap-quick">
+        <button class="ghost" data-q="25">25mごと</button>
+        <button class="ghost" data-q="50">50mごと</button>
+        <button class="ghost" data-q="100">100mごと</button>
+        <button class="ghost" data-q="goal">ゴールのみ</button>
+      </div>
+      <div id="manual-laps"></div>
+      <button class="ghost" id="btn-add-lap">＋区間を追加</button>
+
+      <button id="btn-save-manual" class="big blue">この記録を保存</button>
     </section>
 
   </main>

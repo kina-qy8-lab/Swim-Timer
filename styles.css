@@ -345,3 +345,14 @@ button { font-family: inherit; }
 .analysis { margin-top: 16px; padding: 12px; background: var(--surface); border: 2px solid var(--blue); border-radius: 14px; }
 .ana-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
 .ana-head b { font-size: 14px; color: var(--blue-deep); }
+
+/* ── 手動追加：ラップ入力 ── */
+.lap-quick { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.lap-quick button { padding: 8px 12px; font-size: 14px; }
+.lap-in { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.lap-in input { padding: 10px; font-size: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); font-variant-numeric: tabular-nums; }
+.lap-in .ld { width: 92px; }
+.lap-in .lt { flex: 1; }
+.lap-del { width: 42px; height: 42px; flex: none; border: 1px solid var(--line); border-radius: 10px; background: transparent; color: var(--red); font-size: 16px; cursor: pointer; }
+#btn-add-lap { margin-bottom: 16px; }
+#manual-kind { margin-bottom: 14px; }
