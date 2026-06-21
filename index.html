@@ -43,6 +43,15 @@
       </header>
 
       <div class="pool-pick">
+        <span>モード</span>
+        <div class="seg" id="mode-seg">
+          <button data-mode="practice" class="on">練習</button>
+          <button data-mode="meet">記録会</button>
+        </div>
+      </div>
+      <p class="hint" id="mode-note" hidden>記録会モードは次のステップで対応します（現在は練習として動作します）。</p>
+
+      <div class="pool-pick">
         <span>プール</span>
         <div class="seg" id="pool-seg">
           <button data-pool="25" class="on">25m</button>
@@ -80,6 +89,7 @@
         <button id="btn-arm" class="big blue">準備する</button>
         <button id="btn-start" class="big start" hidden>スタート</button>
         <div class="row" hidden id="running-actions">
+          <button id="btn-end" class="big blue">終了して保存</button>
           <button id="btn-reset" class="big ghost danger">リセット</button>
         </div>
         <button id="btn-cancel" class="ghost" hidden>やめる</button>

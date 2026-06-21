@@ -303,3 +303,4 @@ button { font-family: inherit; }
 .te { width: 130px; padding: 8px 10px; font-size: 16px; border: 1px solid var(--line); border-radius: 8px;
   background: var(--surface); color: var(--ink); font-variant-numeric: tabular-nums; text-align: right; }
 .te-hint { color: var(--muted); font-size: 12px; margin: 2px 0 0; }
+.split-row .dlap { color: var(--muted); font-weight: 500; font-size: 0.85em; }

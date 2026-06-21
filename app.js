@@ -47,6 +47,8 @@ let editingRecordId = null;
 let memberSort = "grade";
 let recFilter = "";
 let viewPassHash = null;
+let ending = false;
+let joinedRaceId = null;
 
 const serverNow = () => Date.now() + serverOffset;
 const todayISO = () => {
@@ -178,13 +180,13 @@ onValue(ref(db, RESULTS), (s) => { results = s.val() || {}; if (!$("#screen-reco
 onValue(ref(db, `${SETTINGS}/viewPassHash`), (s) => { viewPassHash = s.val() || null; });
 
 // ── スターター操作 ─────────────────────────────────────
-let pool = 25, lapMode = "both";
+let pool = 25, lapMode = "both", mode = "practice";
 
 function arm() {
   ensureAudio();
   set(ref(db, RACE), {
     state: "armed", raceId: "r" + Date.now().toString(36),
-    poolLength: pool, lapMode,
+    poolLength: pool, lapMode, mode,
     startServerTime: null, armedAt: serverTimestamp(), lanes: null
   });
 }
@@ -195,13 +197,40 @@ function start() {
   scheduleBeepAt(t0Local);
   update(ref(db, RACE), { state: "running", startServerTime: t0Local + serverOffset, startedAt: serverTimestamp() });
 }
-// リセット：確認のうえ、選手は残してラップだけ消し、準備状態へ戻す
+// リセット：確認のうえ、記録も選手の割り当ても消去して準備状態へ戻す
 function resetRace() {
   if (!race) return;
-  if (!confirm("本当にリセットしますか？\n（現在のラップは消去され、選手の割り当ては残ります）")) return;
-  const upd = { state: "armed", startServerTime: null, raceId: "r" + Date.now().toString(36) };
-  Object.keys(race.lanes || {}).forEach((L) => { upd[`lanes/${L}/splits`] = null; });
-  update(ref(db, RACE), upd);
+  if (!confirm("本当にリセットしますか？\n（記録と選手の割り当てが消去されます）")) return;
+  set(ref(db, RACE), {
+    state: "armed", raceId: "r" + Date.now().toString(36),
+    poolLength: race.poolLength, lapMode: race.lapMode, mode: race.mode || "practice",
+    startServerTime: null, armedAt: serverTimestamp(), lanes: null
+  });
+}
+function splitsArrOf(lane) {
+  return (lane.splits ? Object.values(lane.splits) : []).sort((a, b) => a.elapsedMs - b.elapsedMs);
+}
+function buildResult(laneNum, lane) {
+  const arr = splitsArrOf(lane);
+  return {
+    memberId: lane.memberId || null, name: lane.name, school: lane.school || "",
+    dateISO: todayISO(), lane: laneNum, poolLength: race.poolLength || null,
+    lapMode: race.lapMode || null, stroke: lane.stroke || "", distance: lane.distance || null,
+    splits: arr.map((s) => s.elapsedMs), finalMs: arr.length ? arr[arr.length - 1].elapsedMs : 0,
+    createdAt: serverTimestamp()
+  };
+}
+// 終了：未保存のレーンを自動保存してから、レースを片付ける（選手割り当ても消去）
+function endRace() {
+  if (!race || ending) return;
+  ending = true;
+  const lanes = race.lanes || {};
+  Object.entries(lanes).forEach(([L, lane]) => {
+    if (!lane?.name) return;
+    if (splitsArrOf(lane).length && !lane.saved) set(push(ref(db, RESULTS)), buildResult(Number(L), lane));
+  });
+  set(ref(db, RACE), { state: "idle" });
+  setTimeout(() => { ending = false; }, 1500);
 }
 function cancel() { set(ref(db, RACE), { state: "idle" }); }
 
@@ -213,22 +242,19 @@ function laneSplitsArr(lane) {
 function recordSplit() {
   if (!race || race.state !== "running" || race.startServerTime == null) return;
   const plan = currentPlan();
-  if (plan && laneSplitsArr(myLane).length >= plan.count) return; // ゴール済み
+  const n = laneSplitsArr(myLane).length;
+  if (plan && n >= plan.count) return; // ゴール済み
   const elapsed = serverNow() - race.startServerTime;
   if (elapsed < 0) return;
   set(push(child(ref(db, RACE), `lanes/${myLane}/splits`)), { elapsedMs: Math.round(elapsed), at: serverTimestamp() });
+  if (plan && n + 1 >= plan.count) update(ref(db, `${RACE}/lanes/${myLane}`), { done: true });
 }
 function saveResult() {
   const lane = race?.lanes?.[myLane];
   const arr = laneSplitsArr(myLane);
   if (!lane?.name || !arr.length) return;
-  set(push(ref(db, RESULTS)), {
-    memberId: lane.memberId || null, name: lane.name, school: lane.school || "",
-    dateISO: todayISO(), lane: myLane, poolLength: race.poolLength || null,
-    lapMode: race.lapMode || null, stroke: lane.stroke || "", distance: lane.distance || null,
-    splits: arr.map((s) => s.elapsedMs), finalMs: arr[arr.length - 1].elapsedMs,
-    createdAt: serverTimestamp()
-  });
+  set(push(ref(db, RESULTS)), buildResult(myLane, lane));
+  update(ref(db, `${RACE}/lanes/${myLane}`), { saved: true, done: true });
   savedSig = `${race.raceId}:${arr.length}`;
   $("#saved-msg").hidden = false;
   $("#btn-save").disabled = true;
@@ -247,10 +273,17 @@ function onRaceChanged() {
     $("#starter-lanes").hidden = st === "idle";
     $("#starter-hint").hidden = st !== "idle";
     renderStarterLanes();
+    if (st === "running") {
+      const assigned = Object.values(race.lanes || {}).filter((l) => l?.name);
+      if (assigned.length > 0 && assigned.every((l) => l.done === true)) endRace();
+    }
   }
 
   if (role === "recorder" && !$("#screen-recorder").hidden) {
-    const st = race?.state || "idle";
+    if (!race || race.state === "idle" || race.raceId !== joinedRaceId) {
+      resetRecorderSetup(); show("screen-recorder-setup"); return;
+    }
+    const st = race.state;
     const statusEl = $("#rec-status");
     if (st === "running") { statusEl.textContent = "計測中"; statusEl.classList.add("live"); }
     else if (st === "armed") { statusEl.textContent = "まもなくスタート（合図を待つ）"; statusEl.classList.remove("live"); }
@@ -310,13 +343,17 @@ function renderSplits() {
   if (!arr.length) { wrap.innerHTML = ""; return; }
   let html = `<div class="cap"><span>${plan ? "距離" : "#"}</span><span>累計</span><span>ラップ</span></div>`;
   arr.forEach((s, i) => {
-    const prev = i ? arr[i - 1].elapsedMs : 0;
+    const prevCum = i ? arr[i - 1].elapsedMs : 0;
+    const lap = s.elapsedMs - prevCum;
+    const prevLap = i >= 1 ? (arr[i - 1].elapsedMs - (i >= 2 ? arr[i - 2].elapsedMs : 0)) : null;
+    const diff = prevLap != null ? lap - prevLap : null;
+    const diffStr = diff != null ? `<span class="dlap">(${diff >= 0 ? "+" : "−"}${fmt(Math.abs(diff))})</span>` : "";
     const isGoal = plan ? (i === plan.count - 1) : (i === arr.length - 1);
     const label = plan ? `${plan.dists[i] ?? ""}m` : `${i + 1}`;
     html += `<div class="split-row${isGoal ? " final" : ""}">
       <span class="idx">${label}</span>
       <span class="cum">${fmt(s.elapsedMs)}</span>
-      <span class="lap">+${fmt(s.elapsedMs - prev)}</span></div>`;
+      <span class="lap">${fmt(lap)} ${diffStr}</span></div>`;
   });
   wrap.innerHTML = html;
 }
@@ -500,6 +537,9 @@ function onLaneChosen(lane) {
 }
 function joinLane() {
   if (!myLane) return;
+  if (!race || (race.state !== "armed" && race.state !== "running")) {
+    alert("スターターが『準備する』を押すまでお待ちください。"); return;
+  }
   ensureAudio();
   ringHere = $("#ring-here").checked;
   if (!pendingSwimmer) {
@@ -515,6 +555,7 @@ function joinLane() {
   }
   $("#rec-lane-label").textContent = `レーン ${myLane}`;
   savedSig = null; lastBeepRaceId = null;
+  joinedRaceId = race.raceId;
   $("#saved-msg").hidden = true;
   show("screen-recorder");
   onRaceChanged();
@@ -581,8 +622,15 @@ volEl.addEventListener("input", (e) => { beepVol = clampVol(Number(e.target.valu
 
 $("#btn-arm").addEventListener("click", arm);
 $("#btn-start").addEventListener("click", start);
+$("#btn-end").addEventListener("click", endRace);
 $("#btn-reset").addEventListener("click", resetRace);
 $("#btn-cancel").addEventListener("click", cancel);
+$("#mode-seg").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  mode = b.dataset.mode;
+  $$("#mode-seg button").forEach((x) => x.classList.toggle("on", x === b));
+  $("#mode-note").hidden = mode !== "meet";
+});
 
 $("#lane-pick").innerHTML = [1, 2, 3, 4, 5, 6].map((n) => `<button class="lane-opt" data-lane="${n}">${n}</button>`).join("");
 $("#lane-pick").addEventListener("click", (e) => {
