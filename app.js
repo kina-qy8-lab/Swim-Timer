@@ -27,15 +27,28 @@ let race = null;
 
 const serverNow = () => Date.now() + serverOffset;
 
-// ── 発進音の高さ（端末に記憶） ──────────────────────────
+// ── 発進音の設定（端末に記憶） ──────────────────────────
+const DEFAULT_PITCH = 1380; // 初期の高さ(Hz)
+const BEEP_DUR = 0.14;      // 鳴る長さ(秒)。短いほど「ピッ」に近い
+const DEFAULT_VOL = 1.0;    // 初期音量（1.0=基準、最大2.0）
+
 const PITCH_MIN = 800, PITCH_MAX = 2500;
-const clampPitch = (n) => Math.min(PITCH_MAX, Math.max(PITCH_MIN, Math.round(n) || BEEP.frequencyHz));
+const clampPitch = (n) => Math.min(PITCH_MAX, Math.max(PITCH_MIN, Math.round(n) || DEFAULT_PITCH));
 function loadPitch() {
   try { const v = localStorage.getItem("beepHz"); if (v) return clampPitch(Number(v)); } catch (e) {}
-  return clampPitch(BEEP.frequencyHz);
+  return DEFAULT_PITCH;
 }
 function savePitch(hz) { try { localStorage.setItem("beepHz", String(hz)); } catch (e) {} }
 let beepHz = loadPitch();
+
+const VOL_MIN = 0.2, VOL_MAX = 2.0;
+const clampVol = (n) => Math.min(VOL_MAX, Math.max(VOL_MIN, isNaN(n) ? DEFAULT_VOL : n));
+function loadVol() {
+  try { const v = localStorage.getItem("beepVol"); if (v) return clampVol(Number(v)); } catch (e) {}
+  return DEFAULT_VOL;
+}
+function saveVol(v) { try { localStorage.setItem("beepVol", String(v)); } catch (e) {} }
+let beepVol = loadVol();
 
 // ── 時間の整形（カンマ2秒・競泳式に切り捨て） ───────────────
 function fmt(ms) {
@@ -76,10 +89,10 @@ function scheduleBeepAt(targetEpochMs, doFlash = true) {
   const gain = audioCtx.createGain();
   osc.type = "sine";
   osc.frequency.value = beepHz;
-  const dur = BEEP.durationSec, vol = BEEP.volume;
+  const dur = BEEP_DUR, vol = beepVol;
   gain.gain.setValueAtTime(0.0001, when);
-  gain.gain.exponentialRampToValueAtTime(vol, when + 0.006);
-  gain.gain.setValueAtTime(vol, when + dur - 0.06);
+  gain.gain.exponentialRampToValueAtTime(vol, when + 0.004);
+  gain.gain.setValueAtTime(vol, when + Math.max(0.01, dur - 0.03));
   gain.gain.exponentialRampToValueAtTime(0.0001, when + dur);
   osc.connect(gain).connect(audioCtx.destination);
   osc.start(when);
@@ -280,6 +293,16 @@ pitchEl.addEventListener("input", (e) => {
 $("#btn-test-sound").addEventListener("click", () => {
   ensureAudio();
   scheduleBeepAt(Date.now() + 40, false); // テストは画面フラッシュなし
+});
+
+const volEl = $("#vol");
+const volVal = $("#vol-val");
+volEl.value = beepVol;
+volVal.textContent = Math.round(beepVol * 100) + "%";
+volEl.addEventListener("input", (e) => {
+  beepVol = clampVol(Number(e.target.value));
+  volVal.textContent = Math.round(beepVol * 100) + "%";
+  saveVol(beepVol);
 });
 
 $("#btn-arm").addEventListener("click", arm);

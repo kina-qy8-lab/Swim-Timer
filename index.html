@@ -45,11 +45,18 @@
         </div>
       </div>
 
-      <div class="sound-row">
-        <label for="pitch">発進音の高さ</label>
-        <input id="pitch" type="range" min="800" max="2500" step="10" />
-        <span id="pitch-val" class="pitch-val">—</span>
-        <button id="btn-test-sound" class="ghost">🔊 テスト</button>
+      <div class="sound-box">
+        <div class="sound-row">
+          <label for="pitch">高さ</label>
+          <input id="pitch" type="range" min="800" max="2500" step="10" />
+          <span id="pitch-val" class="pitch-val">—</span>
+          <button id="btn-test-sound" class="ghost">🔊 テスト</button>
+        </div>
+        <div class="sound-row">
+          <label for="vol">音量</label>
+          <input id="vol" type="range" min="0.2" max="2" step="0.05" />
+          <span id="vol-val" class="pitch-val">—</span>
+        </div>
       </div>
 
       <div class="state-line">状態：<b id="starter-state">準備前</b></div>

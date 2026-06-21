@@ -116,14 +116,18 @@ button { font-family: inherit; }
 .seg button.on { background: var(--blue); color: #fff; font-weight: 700; }
 
 /* 発進音の調整 */
+.sound-box {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  padding: 8px 12px; margin: 0 0 14px; box-shadow: var(--shadow);
+}
 .sound-row {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
-  padding: 10px 12px; margin: 0 0 14px; box-shadow: var(--shadow);
+  padding: 6px 0;
 }
-.sound-row label { color: var(--muted); font-size: 14px; }
+.sound-row + .sound-row { border-top: 1px solid var(--line); }
+.sound-row label { color: var(--muted); font-size: 14px; min-width: 36px; }
 .sound-row input[type="range"] { flex: 1; min-width: 120px; accent-color: var(--orange); height: 28px; }
-.pitch-val { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--blue-deep); min-width: 64px; text-align: right; }
+.pitch-val { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--blue-deep); min-width: 56px; text-align: right; }
 .sound-row .ghost { color: var(--orange-deep); border-color: #ffd9bd; }
 
 .state-line { color: var(--muted); margin: 2px 0 12px; }
