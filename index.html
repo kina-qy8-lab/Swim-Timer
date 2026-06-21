@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b1f3a" />
+  <title>競泳タイマー（同期PoC）</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <main id="app">
+
+    <!-- 役割選択 -->
+    <section id="screen-role" class="screen">
+      <h1 class="title">競泳タイマー<span class="sub">同期PoC</span></h1>
+      <p class="lead">この端末の役割を選んでください。</p>
+      <div class="role-grid">
+        <button class="role-btn role-starter" data-role="starter">
+          <span class="role-name">スターター</span>
+          <span class="role-desc">合図を出して全端末を同時にスタート</span>
+        </button>
+        <button class="role-btn role-recorder" data-role="recorder">
+          <span class="role-name">記録者</span>
+          <span class="role-desc">レーンを担当してラップ・ゴールを記録</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- スターター -->
+    <section id="screen-starter" class="screen" hidden>
+      <header class="bar">
+        <button class="ghost back" data-back>← 戻る</button>
+        <span class="bar-title">スターター</span>
+        <span class="spacer"></span>
+      </header>
+
+      <div class="pool-pick">
+        <span>プール</span>
+        <div class="seg" id="pool-seg">
+          <button data-pool="25" class="on">25m</button>
+          <button data-pool="50">50m</button>
+        </div>
+      </div>
+
+      <div class="state-line">状態：<b id="starter-state">準備前</b></div>
+
+      <div class="starter-actions">
+        <button id="btn-arm" class="big amber">準備する</button>
+        <button id="btn-start" class="big start" hidden>スタート</button>
+        <div class="row" hidden id="running-actions">
+          <button id="btn-rearm" class="big ghost">もう一度 準備</button>
+        </div>
+        <button id="btn-cancel" class="ghost" hidden>やめる</button>
+      </div>
+
+      <div class="big-clock" id="starter-clock" hidden>0.00</div>
+
+      <div class="lanes" id="starter-lanes" hidden></div>
+      <p class="hint" id="starter-hint">「準備する」を押すと、記録者がレーンを選べるようになります。</p>
+    </section>
+
+    <!-- 記録者：レーン選択 -->
+    <section id="screen-recorder-setup" class="screen" hidden>
+      <header class="bar">
+        <button class="ghost back" data-back>← 戻る</button>
+        <span class="bar-title">記録者</span>
+        <span class="spacer"></span>
+      </header>
+
+      <p class="lead">担当するレーンを選んでください。</p>
+      <div class="lane-pick" id="lane-pick"></div>
+
+      <label class="field">
+        <span>選手名（任意）</span>
+        <input id="swimmer-name" type="text" inputmode="text" placeholder="例）山田" />
+      </label>
+
+      <label class="check">
+        <input id="ring-here" type="checkbox" />
+        <span>この端末でも発進音を鳴らす</span>
+      </label>
+
+      <button id="btn-join" class="big start" disabled>このレーンで記録する</button>
+    </section>
+
+    <!-- 記録者：計測 -->
+    <section id="screen-recorder" class="screen" hidden>
+      <header class="bar">
+        <button class="ghost back" data-back>← レーン変更</button>
+        <span class="bar-title"><b id="rec-lane-label">レーン</b></span>
+        <span class="spacer"></span>
+      </header>
+
+      <div class="rec-status" id="rec-status">スターターの準備を待っています…</div>
+
+      <div class="big-clock" id="rec-clock">0.00</div>
+
+      <button id="btn-split" class="huge split" disabled>ラップ / ゴール</button>
+
+      <div class="splits" id="splits"></div>
+    </section>
+
+  </main>
+
+  <!-- 診断バー（常時表示：2台を並べて同じ値が動けば同期OK） -->
+  <footer id="diag">
+    <span class="dot" id="conn-dot"></span>
+    <span id="conn-text">接続中…</span>
+    <span class="diag-sep">|</span>
+    <span>ズレ <b id="offset-val">—</b> ms</span>
+    <span class="diag-sep">|</span>
+    <span>同期時計 <b id="sync-clock">—</b></span>
+  </footer>
+
+  <div id="flash" aria-hidden="true"></div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
