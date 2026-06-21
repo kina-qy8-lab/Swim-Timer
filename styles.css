@@ -271,3 +271,35 @@ button { font-family: inherit; }
 .r-sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
 .r-laps { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .chip { font-size: 12px; color: var(--blue-deep); background: var(--blue-soft); border-radius: 999px; padding: 2px 8px; font-variant-numeric: tabular-nums; }
+
+/* ── 追加分 ── */
+.sound-toggle { display: inline-block; margin: 0 0 12px; }
+.big.danger { background: var(--red); }
+
+.row2 { display: flex; gap: 10px; align-items: center; }
+.row2 .big { flex: 1; }
+
+.list-head { display: flex; align-items: center; justify-content: space-between; margin: 14px 0 8px; color: var(--muted); }
+.seg.msort button { padding: 8px 12px; font-size: 14px; }
+
+.member-row { grid-template-columns: 1fr auto; }
+.member-row.editing { outline: 2px solid var(--blue); }
+.member-row .m-actions { grid-column: 2; grid-row: 1 / span 2; align-self: center; display: flex; gap: 6px; }
+.member-row .edit, .member-row .del, .r-actions .edit, .r-actions .del, .r-actions .save {
+  background: transparent; border: 1px solid var(--line); border-radius: 8px;
+  padding: 8px 12px; font-size: 14px; cursor: pointer;
+}
+.member-row .edit, .r-actions .edit { color: var(--blue-deep); }
+.member-row .del, .r-actions .del { color: var(--red); }
+.r-actions .save { color: #fff; background: var(--blue); border-color: var(--blue); }
+
+.rec-event { text-align: center; color: var(--muted); font-size: 14px; margin: 0 0 4px; }
+
+.r-actions { display: flex; gap: 8px; margin-top: 8px; }
+.record-row.editing { outline: 2px solid var(--blue); }
+.te-list { display: grid; gap: 8px; margin: 8px 0; }
+.te-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.te-row span { color: var(--muted); font-size: 13px; }
+.te { width: 130px; padding: 8px 10px; font-size: 16px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--surface); color: var(--ink); font-variant-numeric: tabular-nums; text-align: right; }
+.te-hint { color: var(--muted); font-size: 12px; margin: 2px 0 0; }
