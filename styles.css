@@ -23,6 +23,7 @@
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+[hidden] { display: none !important; }
 html, body { margin: 0; height: 100%; }
 body {
   background:
@@ -32,10 +33,10 @@ body {
   font-family: system-ui, -apple-system, "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
   font-size: 17px;
   line-height: 1.5;
-  padding-bottom: 48px; /* diag bar */
+  padding-bottom: calc(56px + env(safe-area-inset-bottom)); /* diag bar + セーフエリア */
 }
 
-#app { max-width: 560px; margin: 0 auto; padding: 18px 16px 28px; }
+#app { max-width: 560px; margin: 0 auto; padding: 18px 16px calc(40px + env(safe-area-inset-bottom)); }
 .screen { animation: fade .18s ease; }
 @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 
@@ -196,10 +197,10 @@ button { font-family: inherit; }
 
 /* 診断バー */
 #diag {
-  position: fixed; left: 0; right: 0; bottom: 0; height: 40px;
+  position: fixed; left: 0; right: 0; bottom: 0; min-height: 40px;
   display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap;
   background: var(--surface); border-top: 1px solid var(--line);
-  color: var(--muted); font-size: 13px; padding: 0 12px;
+  color: var(--muted); font-size: 13px; padding: 6px 12px calc(6px + env(safe-area-inset-bottom));
   font-variant-numeric: tabular-nums; box-shadow: 0 -2px 10px rgba(13,79,158,.05);
 }
 #diag b { color: var(--ink); }
@@ -226,8 +227,11 @@ button { font-family: inherit; }
   width: 100%; padding: 14px; font-size: 18px; border-radius: 12px;
   border: 1px solid var(--line); background: var(--surface); color: var(--ink);
 }
-.frow { display: flex; gap: 12px; }
-.frow .field { flex: 1; }
+.frow { display: flex; gap: 12px; align-items: end; }
+.frow .field { flex: 1; min-width: 0; }
+/* .field 内のセグメント（並べ替え・コース等）は入力欄と高さ・幅を揃える */
+.field .seg { display: flex; width: 100%; }
+.field .seg button { flex: 1; padding: 14px 8px; font-size: 15px; }
 
 /* 記録者：選手の自動表示 */
 .rec-swimmer {
