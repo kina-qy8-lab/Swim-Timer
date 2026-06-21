@@ -452,8 +452,9 @@ function allRecs() { return Object.entries(results).map(([id, r]) => ({ id, ...r
 function fiscalYear(dateISO) { if (!dateISO) return null; const [y, m] = dateISO.split("-").map(Number); return m >= 4 ? y : y - 1; }
 function currentFiscalYear() { const d = new Date(); return (d.getMonth() + 1) >= 4 ? d.getFullYear() : d.getFullYear() - 1; }
 function evKey(r) { return `${r.isRelay ? "R" : "I"}|${r.stroke || ""}|${r.distance || ""}|${r.poolLength || ""}`; }
-function evLabelFromKey(k) { const p = k.split("|"); return `${p[1] || "自由計測"} ${p[2] ? p[2] + "m" : ""}（${p[3] || "?"}m）`.replace(/\s+/g, " ").trim(); }
-function evLabel(r) { return `${r.stroke || "自由計測"} ${r.distance ? r.distance + "m" : ""}（${r.poolLength || "?"}m）`.replace(/\s+/g, " ").trim(); }
+function courseLabel(p) { p = Number(p); return p === 50 ? "長水路" : p === 25 ? "短水路" : "?"; }
+function evLabelFromKey(k) { const p = k.split("|"); return `${p[1] || "自由計測"} ${p[2] ? p[2] + "m" : ""}（${courseLabel(p[3])}）`.replace(/\s+/g, " ").trim(); }
+function evLabel(r) { return `${r.stroke || "自由計測"} ${r.distance ? r.distance + "m" : ""}（${courseLabel(r.poolLength)}）`.replace(/\s+/g, " ").trim(); }
 function recDists(r) {
   const n = (r.splits || []).length;
   if (r.distance && r.poolLength && r.lapMode) { const p = lapPlan(r.poolLength, r.distance, r.lapMode); if (p && p.dists.length === n) return p.dists; }
