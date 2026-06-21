@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#0b1f3a" />
+  <meta name="theme-color" content="#1577dd" />
   <title>競泳タイマー（同期PoC）</title>
   <link rel="stylesheet" href="./styles.css" />
 </head>
@@ -13,6 +13,9 @@
     <!-- 役割選択 -->
     <section id="screen-role" class="screen">
       <h1 class="title">競泳タイマー<span class="sub">同期PoC</span></h1>
+      <svg class="wave" viewBox="0 0 120 8" preserveAspectRatio="none" aria-hidden="true">
+        <path d="M0 4 Q15 0 30 4 T60 4 T90 4 T120 4" fill="none" stroke="var(--orange)" stroke-width="1.6" />
+      </svg>
       <p class="lead">この端末の役割を選んでください。</p>
       <div class="role-grid">
         <button class="role-btn role-starter" data-role="starter">
@@ -42,10 +45,17 @@
         </div>
       </div>
 
+      <div class="sound-row">
+        <label for="pitch">発進音の高さ</label>
+        <input id="pitch" type="range" min="800" max="2500" step="10" />
+        <span id="pitch-val" class="pitch-val">—</span>
+        <button id="btn-test-sound" class="ghost">🔊 テスト</button>
+      </div>
+
       <div class="state-line">状態：<b id="starter-state">準備前</b></div>
 
       <div class="starter-actions">
-        <button id="btn-arm" class="big amber">準備する</button>
+        <button id="btn-arm" class="big blue">準備する</button>
         <button id="btn-start" class="big start" hidden>スタート</button>
         <div class="row" hidden id="running-actions">
           <button id="btn-rearm" class="big ghost">もう一度 準備</button>
