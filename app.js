@@ -134,6 +134,22 @@ function scheduleBeepAt(targetEpochMs, doFlash = true) {
 }
 function fireFlash() { const f = $("#flash"); f.classList.remove("fire"); void f.offsetWidth; f.classList.add("fire"); }
 
+// iOS対策：最初のタップで音声を解錠（無音バッファを1回再生）。
+// ※消音スイッチ（マナーモード）がオンだと、解錠しても鳴りません。
+let audioUnlocked = false;
+function unlockAudio() {
+  ensureAudio();
+  if (!audioCtx || audioUnlocked) return;
+  try {
+    const src = audioCtx.createBufferSource();
+    src.buffer = audioCtx.createBuffer(1, 1, 22050);
+    src.connect(audioCtx.destination); src.start(0);
+    audioUnlocked = true;
+  } catch (e) {}
+}
+document.addEventListener("pointerdown", unlockAudio);
+document.addEventListener("touchend", unlockAudio);
+
 // ── DOMヘルパ ──────────────────────────────────────────
 const $  = (s) => document.querySelector(s);
 const $$ = (s) => Array.from(document.querySelectorAll(s));
@@ -182,57 +198,72 @@ onValue(ref(db, `${SETTINGS}/viewPassHash`), (s) => { viewPassHash = s.val() || 
 // ── スターター操作 ─────────────────────────────────────
 let pool = 25, lapMode = "both", mode = "practice";
 
-function arm() {
-  ensureAudio();
+// 非計測時は常に ready（準備）状態。スターター画面に入ったら ready を保証。
+function ensureReady() {
+  if (race && race.state === "running") return;
+  if (race && race.state === "ready") {
+    pool = race.poolLength || pool; lapMode = race.lapMode || lapMode; mode = race.mode || mode;
+    return;
+  }
   set(ref(db, RACE), {
-    state: "armed", raceId: "r" + Date.now().toString(36),
-    poolLength: pool, lapMode, mode,
-    startServerTime: null, armedAt: serverTimestamp(), lanes: null
+    state: "ready", raceId: "r" + Date.now().toString(36),
+    poolLength: pool, lapMode, mode, startServerTime: null, lanes: null
   });
+}
+// 設定（プール/ラップ/モード）を即時にセッションへ反映（記録者にリアルタイム同期）
+function setConfig() {
+  if (race && race.state !== "running") update(ref(db, RACE), { poolLength: pool, lapMode, mode });
+}
+function syncStarterControls() {
+  $$("#pool-seg button").forEach((x) => x.classList.toggle("on", Number(x.dataset.pool) === pool));
+  $$("#lap-seg button").forEach((x) => x.classList.toggle("on", x.dataset.lap === lapMode));
+  $$("#mode-seg button").forEach((x) => x.classList.toggle("on", x.dataset.mode === mode));
+  $("#mode-note").hidden = mode !== "meet";
 }
 function start() {
   ensureAudio();
-  if (!race || race.state !== "armed") return;
+  if (!race || race.state !== "ready") return;
   const t0Local = Date.now() + START_LEAD_MS;
   scheduleBeepAt(t0Local);
   update(ref(db, RACE), { state: "running", startServerTime: t0Local + serverOffset, startedAt: serverTimestamp() });
 }
-// リセット：確認のうえ、記録も選手の割り当ても消去して準備状態へ戻す
+function freshReady() {
+  return {
+    state: "ready", raceId: "r" + Date.now().toString(36),
+    poolLength: race.poolLength, lapMode: race.lapMode, mode: race.mode || "practice",
+    startServerTime: null, lanes: null
+  };
+}
+// リセット：確認のうえ、記録も選手割り当ても消して準備状態へ
 function resetRace() {
   if (!race) return;
   if (!confirm("本当にリセットしますか？\n（記録と選手の割り当てが消去されます）")) return;
-  set(ref(db, RACE), {
-    state: "armed", raceId: "r" + Date.now().toString(36),
-    poolLength: race.poolLength, lapMode: race.lapMode, mode: race.mode || "practice",
-    startServerTime: null, armedAt: serverTimestamp(), lanes: null
-  });
+  set(ref(db, RACE), freshReady());
 }
 function splitsArrOf(lane) {
   return (lane.splits ? Object.values(lane.splits) : []).sort((a, b) => a.elapsedMs - b.elapsedMs);
 }
 function buildResult(laneNum, lane) {
   const arr = splitsArrOf(lane);
-  return {
-    memberId: lane.memberId || null, name: lane.name, school: lane.school || "",
-    dateISO: todayISO(), lane: laneNum, poolLength: race.poolLength || null,
-    lapMode: race.lapMode || null, stroke: lane.stroke || "", distance: lane.distance || null,
+  const base = {
+    dateISO: todayISO(), lane: laneNum, poolLength: race.poolLength || null, lapMode: race.lapMode || null,
+    stroke: lane.stroke || "", distance: lane.distance || null,
     splits: arr.map((s) => s.elapsedMs), finalMs: arr.length ? arr[arr.length - 1].elapsedMs : 0,
     createdAt: serverTimestamp()
   };
+  if (lane.isRelay) return { ...base, isRelay: true, name: lane.name || "リレー", school: lane.school || "", legs: lane.legs || [] };
+  return { ...base, memberId: lane.memberId || null, name: lane.name, school: lane.school || "" };
 }
-// 終了：未保存のレーンを自動保存してから、レースを片付ける（選手割り当ても消去）
+// 終了：割り当て済み全レーンを自動保存してから片付ける（選手割り当ても消去）
 function endRace() {
   if (!race || ending) return;
   ending = true;
-  const lanes = race.lanes || {};
-  Object.entries(lanes).forEach(([L, lane]) => {
-    if (!lane?.name) return;
-    if (splitsArrOf(lane).length && !lane.saved) set(push(ref(db, RESULTS)), buildResult(Number(L), lane));
+  Object.entries(race.lanes || {}).forEach(([L, lane]) => {
+    if (lane?.name && splitsArrOf(lane).length) set(push(ref(db, RESULTS)), buildResult(Number(L), lane));
   });
-  set(ref(db, RACE), { state: "idle" });
+  set(ref(db, RACE), freshReady());
   setTimeout(() => { ending = false; }, 1500);
 }
-function cancel() { set(ref(db, RACE), { state: "idle" }); }
 
 // ── 記録者操作 ─────────────────────────────────────────
 function laneSplitsArr(lane) {
@@ -249,51 +280,38 @@ function recordSplit() {
   set(push(child(ref(db, RACE), `lanes/${myLane}/splits`)), { elapsedMs: Math.round(elapsed), at: serverTimestamp() });
   if (plan && n + 1 >= plan.count) update(ref(db, `${RACE}/lanes/${myLane}`), { done: true });
 }
-function saveResult() {
-  const lane = race?.lanes?.[myLane];
-  const arr = laneSplitsArr(myLane);
-  if (!lane?.name || !arr.length) return;
-  set(push(ref(db, RESULTS)), buildResult(myLane, lane));
-  update(ref(db, `${RACE}/lanes/${myLane}`), { saved: true, done: true });
-  savedSig = `${race.raceId}:${arr.length}`;
-  $("#saved-msg").hidden = false;
-  $("#btn-save").disabled = true;
-}
+function saveResult() { /* 手動保存は廃止：終了時に自動保存される */ }
 
 // ── 画面更新（レース） ─────────────────────────────────
 function onRaceChanged() {
   if (role === "starter") {
-    const st = race?.state || "idle";
-    $("#starter-state").textContent = { idle: "準備前", armed: "準備OK（記録者を待機）", running: "計測中" }[st] || st;
-    $("#btn-arm").hidden = st !== "idle";
-    $("#btn-start").hidden = st !== "armed";
-    $("#btn-cancel").hidden = st !== "armed";
-    $("#running-actions").hidden = st !== "running";
-    $("#starter-clock").hidden = st !== "running";
-    $("#starter-lanes").hidden = st === "idle";
-    $("#starter-hint").hidden = st !== "idle";
+    const running = race?.state === "running";
+    $("#starter-state").textContent = running ? "計測中" : "準備OK（記録者を待機）";
+    $("#starter-config").hidden = running;
+    $("#btn-start").hidden = running;
+    $("#running-actions").hidden = !running;
+    $("#starter-clock").hidden = !running;
+    $("#starter-hint").hidden = running;
     renderStarterLanes();
-    if (st === "running") {
+    if (running) {
       const assigned = Object.values(race.lanes || {}).filter((l) => l?.name);
       if (assigned.length > 0 && assigned.every((l) => l.done === true)) endRace();
     }
   }
 
   if (role === "recorder" && !$("#screen-recorder").hidden) {
-    if (!race || race.state === "idle" || race.raceId !== joinedRaceId) {
+    if (!race || race.raceId !== joinedRaceId) {
       resetRecorderSetup(); show("screen-recorder-setup"); return;
     }
-    const st = race.state;
+    const running = race.state === "running";
     const statusEl = $("#rec-status");
-    if (st === "running") { statusEl.textContent = "計測中"; statusEl.classList.add("live"); }
-    else if (st === "armed") { statusEl.textContent = "まもなくスタート（合図を待つ）"; statusEl.classList.remove("live"); }
-    else { statusEl.textContent = "スターターの準備を待っています…"; statusEl.classList.remove("live"); }
-    const lane = race?.lanes?.[myLane];
+    statusEl.textContent = running ? "計測中" : "まもなくスタート（合図を待つ）";
+    statusEl.classList.toggle("live", running);
+    const lane = race.lanes?.[myLane];
     $("#rec-swimmer").textContent = lane?.name || "—";
     $("#rec-event").textContent = lane?.stroke ? `${lane.stroke} ${lane.distance}m` : "自由計測";
     renderSplits();
     updateSplitButton();
-    updateSaveButton();
   }
 
   if (role === "recorder" && ringHere && race?.state === "running"
@@ -315,14 +333,6 @@ function updateSplitButton() {
     btn.disabled = !running;
     btn.textContent = "ラップ / ゴール";
   }
-}
-function updateSaveButton() {
-  const lane = race?.lanes?.[myLane];
-  const arr = laneSplitsArr(myLane);
-  const sig = `${race?.raceId}:${arr.length}`;
-  const canSave = arr.length > 0 && !!lane?.name && sig !== savedSig;
-  $("#btn-save").disabled = !canSave;
-  if (canSave) $("#saved-msg").hidden = true;
 }
 function renderStarterLanes() {
   const wrap = $("#starter-lanes"); if (wrap.hidden) return;
@@ -436,7 +446,7 @@ function populateFilter() {
 }
 function recordsFor(filter) {
   let list = Object.entries(results).map(([id, r]) => ({ id, ...r }));
-  if (filter && filter !== "__all") list = list.filter((r) => r.memberId === filter);
+  if (filter && filter !== "__all") list = list.filter((r) => r.isRelay ? (r.legs || []).some((l) => l.memberId === filter) : r.memberId === filter);
   return list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 }
 function renderRecords() {
@@ -451,9 +461,13 @@ function recordRowHtml(r) {
   let laps = "";
   splits.forEach((cum, i) => { laps += `<span class="chip">+${fmt(cum - (i ? splits[i - 1] : 0))}</span>`; });
   const ev = r.stroke ? `${escapeHtml(r.stroke)} ${r.distance}m` : "自由計測";
+  const relayLegs = r.isRelay
+    ? `<div class="r-legs">${(r.legs || []).map((l, i) => `<span class="leg">${i + 1}. ${escapeHtml(l.name)}${l.legStroke ? `（${escapeHtml(l.legStroke)}）` : ""}</span>`).join("")}</div>`
+    : "";
   return `<div class="record-row" data-rec="${r.id}">
-    <div class="r-head"><span class="r-final">${fmt(r.finalMs)}</span><span class="r-name">${escapeHtml(r.name || "")}</span><span class="r-meta">${ev}</span></div>
+    <div class="r-head"><span class="r-final">${fmt(r.finalMs)}</span><span class="r-name">${r.isRelay ? "🏊 リレー" : escapeHtml(r.name || "")}</span><span class="r-meta">${ev}</span></div>
     <div class="r-sub">${escapeHtml(r.dateISO || "")}・L${r.lane ?? "-"}・${r.poolLength || "?"}m・${escapeHtml(r.school || "")}</div>
+    ${relayLegs}
     <div class="r-laps">${laps}</div>
     <div class="r-actions"><button class="edit" data-redit="${r.id}">修正</button><button class="del" data-rdel="${r.id}">削除</button></div>
   </div>`;
@@ -490,73 +504,98 @@ function deleteRecord(id) {
   if (editingRecordId === id) editingRecordId = null;
 }
 
-// ── 記録者：レーン＋選手＋種目 ─────────────────────────
+// ── 記録者：レーン＋選手＋種目（編集可・端末間リンク） ─────
+const MEDLEY_ORDER = ["背泳ぎ", "平泳ぎ", "バタフライ", "自由形"];
+const isRelayStroke = (s) => s === "フリーリレー" || s === "メドレーリレー";
+
 function resetRecorderSetup() {
-  myLane = null; pendingSwimmer = null;
+  myLane = null;
   $$(".lane-opt").forEach((x) => x.classList.remove("sel"));
-  $("#swimmer-auto").hidden = true;
   $("#assign-area").hidden = true;
   $("#setup-hint").hidden = true;
   $("#btn-join").disabled = true;
-  $("#ev-stroke").value = ""; $("#dist-field").hidden = true;
 }
-function populatePicker() {
+function memberOptions(selId) {
+  return memberList().map((m) =>
+    `<option value="${m.id}"${m.id === selId ? " selected" : ""}>${escapeHtml(m.name)}（${m.grade}年${m.guest ? "・ゲスト" : ""}）</option>`).join("");
+}
+function populatePicker(selId) {
   const sel = $("#swimmer-pick"); if (!sel) return;
-  const cur = sel.value;
-  sel.innerHTML = ['<option value="">— 選手を選択 —</option>']
-    .concat(memberList().map((m) => `<option value="${m.id}">${escapeHtml(m.name)}（${m.grade}年${m.guest ? "・ゲスト" : ""}）</option>`)).join("");
+  const cur = selId !== undefined ? selId : sel.value;
+  sel.innerHTML = `<option value="">— 選手を選択 —</option>` + memberOptions(cur || "");
   if (cur) sel.value = cur;
 }
-function populateDistances() {
-  const stroke = $("#ev-stroke").value;
-  const dsel = $("#ev-dist");
+function populateDistances(distVal) {
+  const stroke = $("#ev-stroke").value, dsel = $("#ev-dist");
   if (!stroke) { $("#dist-field").hidden = true; dsel.innerHTML = ""; return; }
   dsel.innerHTML = (EVENTS[stroke] || []).map((d) => `<option value="${d}">${d}m</option>`).join("");
   $("#dist-field").hidden = false;
+  if (distVal) dsel.value = String(distVal);
 }
+function buildRelayLegs(stroke, laneData) {
+  const medley = stroke === "メドレーリレー";
+  let html = "";
+  for (let i = 0; i < 4; i++) {
+    const sel = laneData?.legs?.[i]?.memberId || "";
+    html += `<div class="leg-row"><span class="leg-label">${i + 1}泳者${medley ? `・${MEDLEY_ORDER[i]}` : ""}</span>
+      <select class="leg-pick" data-leg="${i}"><option value="">— 選択 —</option>${memberOptions(sel)}</select></div>`;
+  }
+  $("#relay-legs").innerHTML = html;
+}
+function applyStrokeMode(laneData) {
+  const stroke = $("#ev-stroke").value;
+  const relay = isRelayStroke(stroke);
+  $("#single-swimmer-field").hidden = relay;
+  $("#relay-legs").hidden = !relay;
+  if (relay) buildRelayLegs(stroke, laneData);
+  else populatePicker(laneData?.memberId || "");
+  updateJoinEnabled();
+}
+function updateJoinEnabled() {
+  const stroke = $("#ev-stroke").value;
+  const ok = isRelayStroke(stroke)
+    ? $$("#relay-legs .leg-pick").some((s) => s.value)
+    : !!$("#swimmer-pick").value;
+  $("#btn-join").disabled = !ok;
+}
+// レーンを選ぶと、既存の割り当てを読み込んで「編集可能」な状態で表示（どの端末でも同じ内容にリンク）
 function onLaneChosen(lane) {
   myLane = lane;
-  const assigned = race?.lanes?.[lane];
-  if (assigned && assigned.name) {
-    pendingSwimmer = { memberId: assigned.memberId || null, name: assigned.name, school: assigned.school || "" };
-    const ev = assigned.stroke ? `${assigned.stroke} ${assigned.distance}m` : "自由計測";
-    $("#swimmer-auto-text").textContent = `選手：${assigned.name}（${ev}）`;
-    $("#swimmer-auto").hidden = false;
-    $("#assign-area").hidden = true;
-    $("#setup-hint").hidden = true;
-    $("#btn-join").disabled = false;
-  } else {
-    pendingSwimmer = null;
-    $("#swimmer-auto").hidden = true;
-    populatePicker();
-    $("#assign-area").hidden = false;
-    $("#ev-stroke").value = ""; populateDistances();
-    $("#setup-hint").hidden = memberList().length !== 0;
-    $("#btn-join").disabled = true;
-  }
+  const a = race?.lanes?.[lane] || null;
+  $("#assign-area").hidden = false;
+  $("#setup-hint").hidden = memberList().length !== 0;
+  $("#ev-stroke").value = a?.stroke || "";
+  populateDistances(a?.distance);
+  applyStrokeMode(a);
 }
 function joinLane() {
   if (!myLane) return;
-  if (!race || (race.state !== "armed" && race.state !== "running")) {
-    alert("スターターが『準備する』を押すまでお待ちください。"); return;
+  if (!race || (race.state !== "ready" && race.state !== "running")) {
+    alert("スターターが画面を開くまでお待ちください。"); return;
   }
   ensureAudio();
   ringHere = $("#ring-here").checked;
-  if (!pendingSwimmer) {
+  const stroke = $("#ev-stroke").value;
+  const distance = stroke ? Number($("#ev-dist").value) : null;
+  let laneData;
+  if (isRelayStroke(stroke)) {
+    const legs = $$("#relay-legs .leg-pick").map((s, i) => {
+      if (!s.value || !members[s.value]) return null;
+      const m = members[s.value];
+      return { memberId: s.value, name: m.name, school: m.school || "", legStroke: stroke === "メドレーリレー" ? MEDLEY_ORDER[i] : "自由形" };
+    }).filter(Boolean);
+    if (!legs.length) return;
+    laneData = { isRelay: true, name: legs.map((l) => l.name).join("→"), school: legs[0].school || "", stroke, distance, legs, memberId: null };
+  } else {
     const id = $("#swimmer-pick").value;
     if (!id || !members[id]) return;
     const m = members[id];
-    const stroke = $("#ev-stroke").value;
-    const distance = stroke ? Number($("#ev-dist").value) : null;
-    pendingSwimmer = { memberId: id, name: m.name, school: m.school || "" };
-    update(ref(db, `${RACE}/lanes/${myLane}`), {
-      memberId: id, name: m.name, school: m.school || "", stroke: stroke || null, distance
-    });
+    laneData = { memberId: id, name: m.name, school: m.school || "", stroke: stroke || null, distance, isRelay: null, legs: null };
   }
+  update(ref(db, `${RACE}/lanes/${myLane}`), laneData);
   $("#rec-lane-label").textContent = `レーン ${myLane}`;
-  savedSig = null; lastBeepRaceId = null;
+  lastBeepRaceId = null;
   joinedRaceId = race.raceId;
-  $("#saved-msg").hidden = true;
   show("screen-recorder");
   onRaceChanged();
 }
@@ -578,7 +617,7 @@ requestAnimationFrame(tick);
 // ── イベント結線 ───────────────────────────────────────
 $$(".role-btn").forEach((b) => b.addEventListener("click", () => {
   role = b.dataset.role;
-  if (role === "starter") { show("screen-starter"); onRaceChanged(); }
+  if (role === "starter") { ensureReady(); syncStarterControls(); show("screen-starter"); onRaceChanged(); }
   else { resetRecorderSetup(); show("screen-recorder-setup"); }
 }));
 
@@ -600,11 +639,13 @@ $("#pool-seg").addEventListener("click", (e) => {
   const btn = e.target.closest("button"); if (!btn) return;
   pool = Number(btn.dataset.pool);
   $$("#pool-seg button").forEach((x) => x.classList.toggle("on", x === btn));
+  setConfig();
 });
 $("#lap-seg").addEventListener("click", (e) => {
   const btn = e.target.closest("button"); if (!btn) return;
   lapMode = btn.dataset.lap;
   $$("#lap-seg button").forEach((x) => x.classList.toggle("on", x === btn));
+  setConfig();
 });
 
 // 音設定の開閉
@@ -620,16 +661,15 @@ const volEl = $("#vol"), volVal = $("#vol-val");
 volEl.value = beepVol; volVal.textContent = Math.round(beepVol * 100) + "%";
 volEl.addEventListener("input", (e) => { beepVol = clampVol(Number(e.target.value)); volVal.textContent = Math.round(beepVol * 100) + "%"; saveVol(beepVol); });
 
-$("#btn-arm").addEventListener("click", arm);
 $("#btn-start").addEventListener("click", start);
 $("#btn-end").addEventListener("click", endRace);
 $("#btn-reset").addEventListener("click", resetRace);
-$("#btn-cancel").addEventListener("click", cancel);
 $("#mode-seg").addEventListener("click", (e) => {
   const b = e.target.closest("button"); if (!b) return;
   mode = b.dataset.mode;
   $$("#mode-seg button").forEach((x) => x.classList.toggle("on", x === b));
   $("#mode-note").hidden = mode !== "meet";
+  setConfig();
 });
 
 $("#lane-pick").innerHTML = [1, 2, 3, 4, 5, 6].map((n) => `<button class="lane-opt" data-lane="${n}">${n}</button>`).join("");
@@ -638,11 +678,11 @@ $("#lane-pick").addEventListener("click", (e) => {
   $$(".lane-opt").forEach((x) => x.classList.toggle("sel", x === b));
   onLaneChosen(Number(b.dataset.lane));
 });
-$("#swimmer-pick").addEventListener("change", (e) => { $("#btn-join").disabled = !e.target.value; });
-$("#ev-stroke").addEventListener("change", populateDistances);
+$("#swimmer-pick").addEventListener("change", updateJoinEnabled);
+$("#ev-stroke").addEventListener("change", () => { populateDistances(); applyStrokeMode(null); });
+$("#relay-legs").addEventListener("change", updateJoinEnabled);
 $("#btn-join").addEventListener("click", joinLane);
 $("#btn-split").addEventListener("click", recordSplit);
-$("#btn-save").addEventListener("click", saveResult);
 
 // メンバー
 $("#btn-add-member").addEventListener("click", addOrUpdateMember);

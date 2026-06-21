@@ -42,6 +42,7 @@
         <span class="spacer"></span>
       </header>
 
+      <div id="starter-config">
       <div class="pool-pick">
         <span>モード</span>
         <div class="seg" id="mode-seg">
@@ -82,23 +83,22 @@
           <span id="vol-val" class="pitch-val">—</span>
         </div>
       </div>
+      </div><!-- /starter-config -->
 
-      <div class="state-line">状態：<b id="starter-state">準備前</b></div>
+      <div class="state-line">状態：<b id="starter-state">準備OK</b></div>
 
       <div class="starter-actions">
-        <button id="btn-arm" class="big blue">準備する</button>
-        <button id="btn-start" class="big start" hidden>スタート</button>
+        <button id="btn-start" class="big start">スタート</button>
         <div class="row" hidden id="running-actions">
           <button id="btn-end" class="big blue">終了して保存</button>
           <button id="btn-reset" class="big ghost danger">リセット</button>
         </div>
-        <button id="btn-cancel" class="ghost" hidden>やめる</button>
       </div>
 
       <div class="big-clock" id="starter-clock" hidden>0.00</div>
 
-      <div class="lanes" id="starter-lanes" hidden></div>
-      <p class="hint" id="starter-hint">「準備する」を押すと、記録者がレーンを選べるようになります。</p>
+      <div class="lanes" id="starter-lanes"></div>
+      <p class="hint" id="starter-hint">記録者がレーンと選手を設定すると、ここに表示されます（スタートしてよいか確認できます）。</p>
     </section>
 
     <!-- 記録者：レーン選択＋選手＋種目 -->
@@ -112,15 +112,7 @@
       <p class="lead">担当するレーンを選んでください。</p>
       <div class="lane-pick" id="lane-pick"></div>
 
-      <div id="swimmer-auto" class="rec-swimmer" hidden>
-        <span id="swimmer-auto-text"></span><span class="auto-tag">自動表示</span>
-      </div>
-
       <div id="assign-area" hidden>
-        <label class="field">
-          <span>選手を選ぶ</span>
-          <select id="swimmer-pick"><option value="">— 選手を選択 —</option></select>
-        </label>
         <div class="frow">
           <label class="field"><span>種目</span>
             <select id="ev-stroke">
@@ -138,6 +130,11 @@
             <select id="ev-dist"></select>
           </label>
         </div>
+        <label class="field" id="single-swimmer-field">
+          <span>選手を選ぶ</span>
+          <select id="swimmer-pick"><option value="">— 選手を選択 —</option></select>
+        </label>
+        <div id="relay-legs" hidden></div>
       </div>
 
       <label class="check">
@@ -166,9 +163,6 @@
       <button id="btn-split" class="huge split" disabled>ラップ / ゴール</button>
 
       <div class="splits" id="splits"></div>
-
-      <button id="btn-save" class="big blue" disabled>この記録を保存</button>
-      <div class="saved-msg" id="saved-msg" hidden>✓ 保存しました</div>
     </section>
 
     <!-- メンバー登録 -->

@@ -304,3 +304,12 @@ button { font-family: inherit; }
   background: var(--surface); color: var(--ink); font-variant-numeric: tabular-nums; text-align: right; }
 .te-hint { color: var(--muted); font-size: 12px; margin: 2px 0 0; }
 .split-row .dlap { color: var(--muted); font-weight: 500; font-size: 0.85em; }
+
+/* リレーの泳者設定 */
+#relay-legs { display: grid; gap: 8px; margin: 0 0 14px; }
+.leg-row { display: flex; align-items: center; gap: 10px; }
+.leg-label { min-width: 110px; color: var(--muted); font-size: 14px; }
+.leg-row .leg-pick { flex: 1; padding: 10px; font-size: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); }
+/* リレーの記録表示 */
+.r-legs { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 4px 0; }
+.r-legs .leg { font-size: 13px; color: var(--ink); }
