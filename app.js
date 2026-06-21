@@ -46,6 +46,18 @@ let editingMemberId = null;
 let editingRecordId = null;
 let memberSort = "grade";
 let recFilter = "";
+// 記録ページの状態
+let recMode = "indiv";        // indiv | relay | ranking
+let indivSub = "summary";     // summary | event
+let evFilter = "";            // 個人・種目の種目キー
+let sortMode = "date";        // date | time
+let overlayOn = false;
+let relayGenderF = "";
+let relayEventF = "";
+let relaySort = "date";
+let rankEvent = "";
+let analysisId = null;
+let chProgress = null, chOverlay = null, chLap = null;
 let viewPassHash = null;
 let ending = false;
 let joinedRaceId = null;
@@ -192,7 +204,7 @@ onValue(ref(db, ".info/connected"), (s) => {
 });
 onValue(ref(db, RACE), (s) => { race = s.val(); onRaceChanged(); });
 onValue(ref(db, MEMBERS), (s) => { members = s.val() || {}; if (!$("#screen-members").hidden) renderMembers(); populatePicker(); populateFilter(); });
-onValue(ref(db, RESULTS), (s) => { results = s.val() || {}; if (!$("#screen-records").hidden) renderRecords(); });
+onValue(ref(db, RESULTS), (s) => { results = s.val() || {}; if (!$("#screen-records").hidden) renderRecordsAll(); });
 onValue(ref(db, `${SETTINGS}/viewPassHash`), (s) => { viewPassHash = s.val() || null; });
 
 // ── スターター操作 ─────────────────────────────────────
@@ -435,47 +447,164 @@ function renderMembers() {
     </div>`).join("");
 }
 
-// ── 記録一覧（絞り込み・編集・削除） ───────────────────────
+// ── 記録ページ ─────────────────────────────────────────
+function allRecs() { return Object.entries(results).map(([id, r]) => ({ id, ...r })); }
+function fiscalYear(dateISO) { if (!dateISO) return null; const [y, m] = dateISO.split("-").map(Number); return m >= 4 ? y : y - 1; }
+function currentFiscalYear() { const d = new Date(); return (d.getMonth() + 1) >= 4 ? d.getFullYear() : d.getFullYear() - 1; }
+function evKey(r) { return `${r.isRelay ? "R" : "I"}|${r.stroke || ""}|${r.distance || ""}|${r.poolLength || ""}`; }
+function evLabelFromKey(k) { const p = k.split("|"); return `${p[1] || "自由計測"} ${p[2] ? p[2] + "m" : ""}（${p[3] || "?"}m）`.replace(/\s+/g, " ").trim(); }
+function evLabel(r) { return `${r.stroke || "自由計測"} ${r.distance ? r.distance + "m" : ""}（${r.poolLength || "?"}m）`.replace(/\s+/g, " ").trim(); }
+function recDists(r) {
+  const n = (r.splits || []).length;
+  if (r.distance && r.poolLength && r.lapMode) { const p = lapPlan(r.poolLength, r.distance, r.lapMode); if (p && p.dists.length === n) return p.dists; }
+  if (r.distance && n) { const step = r.distance / n; return Array.from({ length: n }, (_, i) => Math.round((i + 1) * step)); }
+  return Array.from({ length: n }, (_, i) => i + 1);
+}
+function lapsOf(r) { const s = r.splits || []; return s.map((c, i) => c - (i ? s[i - 1] : 0)); }
+function relayGender(r) {
+  const gs = (r.legs || []).map((l) => members[l.memberId]?.gender).filter(Boolean);
+  if (!gs.length) return "混合";
+  if (gs.every((g) => g === "男")) return "男子";
+  if (gs.every((g) => g === "女")) return "女子";
+  return "混合";
+}
+function sortRecs(list, mode) {
+  if (mode === "time") list.sort((a, b) => (a.finalMs || 0) - (b.finalMs || 0));
+  else list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  return list;
+}
+function swimmerRecs(id) { return allRecs().filter((r) => !r.isRelay && r.memberId === id); }
+
 function populateFilter() {
   const sel = $("#rec-filter"); if (!sel) return;
   const cur = sel.value;
-  const opts = ['<option value="">— 選手を選択 —</option>', '<option value="__all">全員</option>']
-    .concat(memberList().map((m) => `<option value="${m.id}">${escapeHtml(m.name)}（${m.grade}年）</option>`));
-  sel.innerHTML = opts.join("");
+  sel.innerHTML = `<option value="">— 選手を選択 —</option>` + memberList().map((m) => `<option value="${m.id}">${escapeHtml(m.name)}（${m.grade}年）</option>`).join("");
   sel.value = cur || recFilter || "";
 }
-function recordsFor(filter) {
-  let list = Object.entries(results).map(([id, r]) => ({ id, ...r }));
-  if (filter && filter !== "__all") list = list.filter((r) => r.isRelay ? (r.legs || []).some((l) => l.memberId === filter) : r.memberId === filter);
-  return list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+function renderRecordsAll() {
+  $$("#rec-mode button").forEach((b) => b.classList.toggle("on", b.dataset.rmode === recMode));
+  $("#pane-indiv").hidden = recMode !== "indiv";
+  $("#pane-relay").hidden = recMode !== "relay";
+  $("#pane-ranking").hidden = recMode !== "ranking";
+  if (recMode === "indiv") renderIndiv();
+  else if (recMode === "relay") renderRelay();
+  else renderRanking();
+  if (analysisId) renderAnalysis();
 }
-function renderRecords() {
-  const wrap = $("#rlist");
-  if (!recFilter) { wrap.innerHTML = `<p class="empty">上のリストから選手（または全員）を選んでください。</p>`; return; }
-  const list = recordsFor(recFilter);
-  if (!list.length) { wrap.innerHTML = `<p class="empty">記録がありません。</p>`; return; }
-  wrap.innerHTML = list.map((r) => editingRecordId === r.id ? recordEditorHtml(r) : recordRowHtml(r)).join("");
+function rerenderActiveList() {
+  if (recMode === "indiv") renderIndiv();
+  else if (recMode === "relay") renderRelay();
+  else renderRanking();
 }
-function recordRowHtml(r) {
-  const splits = Array.isArray(r.splits) ? r.splits : [];
-  let laps = "";
-  splits.forEach((cum, i) => { laps += `<span class="chip">+${fmt(cum - (i ? splits[i - 1] : 0))}</span>`; });
-  const ev = r.stroke ? `${escapeHtml(r.stroke)} ${r.distance}m` : "自由計測";
-  const relayLegs = r.isRelay
-    ? `<div class="r-legs">${(r.legs || []).map((l, i) => `<span class="leg">${i + 1}. ${escapeHtml(l.name)}${l.legStroke ? `（${escapeHtml(l.legStroke)}）` : ""}</span>`).join("")}</div>`
-    : "";
+
+// ── 個人 ──
+function renderIndiv() {
+  populateFilter();
+  const id = recFilter;
+  $("#indiv-body").hidden = !id;
+  if (!id) return;
+  $$("#indiv-subtab button").forEach((b) => b.classList.toggle("on", b.dataset.sub === indivSub));
+  $("#sub-summary").hidden = indivSub !== "summary";
+  $("#sub-event").hidden = indivSub !== "event";
+  if (indivSub === "summary") renderSummary(id); else renderEventView(id);
+}
+function summaryRowHtml(r) {
+  return `<div class="rec-card" data-open="${r.id}">
+    <span class="rc-time">${fmt(r.finalMs)}</span><span class="rc-ev">${escapeHtml(evLabel(r))}</span><span class="rc-date">${escapeHtml(r.dateISO || "")}</span></div>`;
+}
+function renderSummary(id) {
+  const recs = swimmerRecs(id).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const recent = recs.slice(0, 5);
+  $("#recent5").innerHTML = recent.length ? recent.map(summaryRowHtml).join("") : `<p class="empty">記録なし</p>`;
+  const byEv = {};
+  recs.filter((r) => r.stroke && r.distance).forEach((r) => { const k = evKey(r); if (!byEv[k] || r.finalMs < byEv[k].finalMs) byEv[k] = r; });
+  const bests = Object.values(byEv).sort((a, b) => (a.stroke || "").localeCompare(b.stroke || "", "ja") || a.distance - b.distance);
+  $("#bests").innerHTML = bests.length ? bests.map((r) => `<div class="rec-card" data-open="${r.id}"><span class="rc-time">${fmt(r.finalMs)}</span><span class="rc-ev">${escapeHtml(evLabel(r))}</span><span class="rc-date">${escapeHtml(r.dateISO || "")}</span></div>`).join("") : `<p class="empty">ベスト記録なし</p>`;
+}
+function renderEventView(id) {
+  const recs = swimmerRecs(id).filter((r) => r.stroke && r.distance);
+  const evs = [...new Set(recs.map(evKey))];
+  const sel = $("#ev-filter");
+  sel.innerHTML = evs.map((k) => `<option value="${k}">${escapeHtml(evLabelFromKey(k))}</option>`).join("");
+  if (!evFilter || !evs.includes(evFilter)) evFilter = evs[0] || "";
+  sel.value = evFilter;
+  $$("#sort-seg button").forEach((b) => b.classList.toggle("on", b.dataset.sort === sortMode));
+  const list = recs.filter((r) => evKey(r) === evFilter);
+  drawProgress(list);
+  $("#overlay-toggle").checked = overlayOn;
+  $("#overlay-wrap").hidden = !overlayOn;
+  if (overlayOn) drawOverlay(list);
+  sortRecs(list, sortMode);
+  $("#event-list").innerHTML = list.length ? list.map(recordCardHtml).join("") : `<p class="empty">この種目の記録がありません。</p>`;
+}
+
+// ── リレー ──
+function renderRelay() {
+  let recs = allRecs().filter((r) => r.isRelay);
+  const evs = [...new Set(recs.map(evKey))];
+  const esel = $("#relay-event"); const ecur = esel.value;
+  esel.innerHTML = `<option value="">全て</option>` + evs.map((k) => `<option value="${k}">${escapeHtml(evLabelFromKey(k))}</option>`).join("");
+  esel.value = (relayEventF && evs.includes(relayEventF)) ? relayEventF : "";
+  relayEventF = esel.value;
+  $("#relay-gender").value = relayGenderF;
+  if (relayGenderF) recs = recs.filter((r) => relayGender(r) === relayGenderF);
+  if (relayEventF) recs = recs.filter((r) => evKey(r) === relayEventF);
+  $$("#relay-sort-seg button").forEach((b) => b.classList.toggle("on", b.dataset.sort === relaySort));
+  sortRecs(recs, relaySort);
+  $("#relay-list").innerHTML = recs.length ? recs.map(recordCardHtml).join("") : `<p class="empty">リレーの記録がありません。</p>`;
+}
+
+// ── ランキング ──
+function renderRanking() {
+  const recs = allRecs().filter((r) => r.stroke && r.distance);
+  const evs = [...new Set(recs.map(evKey))].sort((a, b) => a.localeCompare(b));
+  const sel = $("#rank-event");
+  sel.innerHTML = evs.map((k) => `<option value="${k}">${escapeHtml(evLabelFromKey(k))}</option>`).join("");
+  if (!rankEvent || !evs.includes(rankEvent)) rankEvent = evs[0] || "";
+  sel.value = rankEvent;
+  const all = recs.filter((r) => evKey(r) === rankEvent);
+  const fy = currentFiscalYear();
+  $("#rank-year").innerHTML = rankTable(all.filter((r) => fiscalYear(r.dateISO) === fy), rankEvent);
+  $("#rank-all").innerHTML = rankTable(all, rankEvent);
+}
+function rankTable(list, key) {
+  if (!list.length) return `<p class="empty">記録なし</p>`;
+  const isRelay = key.startsWith("R|");
+  let entries;
+  if (isRelay) {
+    const byTeam = {};
+    list.forEach((r) => { const tk = (r.legs || []).map((l) => l.memberId).join(","); if (!byTeam[tk] || r.finalMs < byTeam[tk].finalMs) byTeam[tk] = r; });
+    entries = Object.values(byTeam);
+  } else {
+    const bySw = {};
+    list.forEach((r) => { const k = r.memberId || r.name; if (!bySw[k] || r.finalMs < bySw[k].finalMs) bySw[k] = r; });
+    entries = Object.values(bySw);
+  }
+  entries.sort((a, b) => a.finalMs - b.finalMs);
+  return entries.map((r, i) => `<div class="rank-row" data-open="${r.id}">
+    <span class="rk">${i + 1}</span>
+    <span class="rk-name">${r.isRelay ? "🏊 " + escapeHtml((r.legs || []).map((l) => l.name).join("・")) : escapeHtml(r.name || "")}</span>
+    <span class="rk-time">${fmt(r.finalMs)}</span><span class="rk-date">${escapeHtml(r.dateISO || "")}</span></div>`).join("");
+}
+
+// ── レースカード（一覧・タップで分析・編集/削除） ──
+function recordCardHtml(r) {
+  if (editingRecordId === r.id) return recordEditorHtml(r);
+  const laps = lapsOf(r).map((l) => `<span class="chip">${fmt(l)}</span>`).join("");
+  const who = r.isRelay ? "🏊 リレー" : escapeHtml(r.name || "");
+  const relayLegs = r.isRelay ? `<div class="r-legs">${(r.legs || []).map((l, i) => `<span class="leg">${i + 1}. ${escapeHtml(l.name)}${l.legStroke ? `（${escapeHtml(l.legStroke)}）` : ""}</span>`).join("")}</div>` : "";
   return `<div class="record-row" data-rec="${r.id}">
-    <div class="r-head"><span class="r-final">${fmt(r.finalMs)}</span><span class="r-name">${r.isRelay ? "🏊 リレー" : escapeHtml(r.name || "")}</span><span class="r-meta">${ev}</span></div>
-    <div class="r-sub">${escapeHtml(r.dateISO || "")}・L${r.lane ?? "-"}・${r.poolLength || "?"}m・${escapeHtml(r.school || "")}</div>
-    ${relayLegs}
-    <div class="r-laps">${laps}</div>
-    <div class="r-actions"><button class="edit" data-redit="${r.id}">修正</button><button class="del" data-rdel="${r.id}">削除</button></div>
+    <div class="r-tap" data-open="${r.id}">
+      <div class="r-head"><span class="r-final">${fmt(r.finalMs)}</span><span class="r-name">${who}</span><span class="r-meta">${escapeHtml(evLabel(r))}</span></div>
+      <div class="r-sub">${escapeHtml(r.dateISO || "")}・L${r.lane ?? "-"}・${escapeHtml(r.school || "")}</div>
+      ${relayLegs}<div class="r-laps">${laps}</div>
+    </div>
+    <div class="r-actions"><button class="ghost" data-open="${r.id}">📊 分析</button><button class="edit" data-redit="${r.id}">修正</button><button class="del" data-rdel="${r.id}">削除</button></div>
   </div>`;
 }
 function recordEditorHtml(r) {
   const splits = Array.isArray(r.splits) ? r.splits : [];
-  const rows = splits.map((cum, i) =>
-    `<label class="te-row"><span>${i + 1}本目（累計）</span><input class="te" data-i="${i}" type="text" inputmode="decimal" value="${fmt(cum)}" /></label>`).join("");
+  const rows = splits.map((cum, i) => `<label class="te-row"><span>${i + 1}本目（累計）</span><input class="te" data-i="${i}" type="text" inputmode="decimal" value="${fmt(cum)}" /></label>`).join("");
   return `<div class="record-row editing" data-rec="${r.id}">
     <div class="r-head"><span class="r-name">${escapeHtml(r.name || "")}</span><span class="r-meta">${escapeHtml(r.dateISO || "")}</span></div>
     <div class="te-list">${rows}</div>
@@ -484,24 +613,77 @@ function recordEditorHtml(r) {
   </div>`;
 }
 function saveRecordEdit(id) {
-  const inputs = $$(`#rlist [data-rec="${id}"] .te`);
+  const inputs = $$(`#screen-records [data-rec="${id}"] .te`);
   const splits = [];
-  for (const inp of inputs) {
-    const ms = parseTime(inp.value);
-    if (ms == null) { alert("時間の形式が正しくありません（例：28.55 や 1:05.33）"); return; }
-    splits.push(ms);
-  }
-  for (let i = 1; i < splits.length; i++) {
-    if (splits[i] <= splits[i - 1]) { alert("累計タイムは前の本数より大きくなる必要があります。"); return; }
-  }
+  for (const inp of inputs) { const ms = parseTime(inp.value); if (ms == null) { alert("時間の形式が正しくありません（例：28.55 や 1:05.33）"); return; } splits.push(ms); }
+  for (let i = 1; i < splits.length; i++) if (splits[i] <= splits[i - 1]) { alert("累計タイムは前の本数より大きくなる必要があります。"); return; }
   update(ref(db, `${RESULTS}/${id}`), { splits, finalMs: splits[splits.length - 1] });
   editingRecordId = null;
-  renderRecords();
+  rerenderActiveList();
 }
 function deleteRecord(id) {
   if (!confirm("この記録を削除しますか？")) return;
   remove(ref(db, `${RESULTS}/${id}`));
   if (editingRecordId === id) editingRecordId = null;
+  if (analysisId === id) { analysisId = null; $("#analysis").hidden = true; }
+}
+
+// ── レース分析 ──
+function openAnalysis(id) { analysisId = id; renderAnalysis(); }
+function renderAnalysis() {
+  const r = results[analysisId];
+  if (!r) { analysisId = null; $("#analysis").hidden = true; return; }
+  $("#analysis").hidden = false;
+  $("#ana-title").textContent = `${r.isRelay ? "リレー" : (r.name || "")}｜${evLabel(r)}｜${r.dateISO || ""}`;
+  const dists = recDists(r), laps = lapsOf(r), s = r.splits || [];
+  let rows = s.map((c, i) => {
+    const diff = i >= 1 ? laps[i] - laps[i - 1] : null;
+    const ds = diff != null ? `<span class="dlap">（${diff >= 0 ? "+" : "−"}${fmt(Math.abs(diff))}）</span>` : "";
+    return `<div class="split-row"><span class="idx">${dists[i] ?? i + 1}${r.distance ? "m" : ""}</span><span class="cum">${fmt(c)}</span><span class="lap">${fmt(laps[i])} ${ds}</span></div>`;
+  }).join("");
+  $("#ana-splits").innerHTML = `<div class="cap"><span>距離</span><span>累計</span><span>ラップ（前との差）</span></div>` + rows;
+  drawLap(r);
+  $("#analysis").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+// ── グラフ（Chart.js） ──
+function chartOpts(yTitle) {
+  return { responsive: true, maintainAspectRatio: false, animation: false,
+    plugins: { legend: { display: true, labels: { boxWidth: 12 } } },
+    scales: { y: { title: { display: true, text: yTitle } }, x: { ticks: { maxRotation: 0, autoSkip: true } } } };
+}
+const PALETTE = ["#1577dd", "#ff7a1a", "#22a06b", "#9b59b6", "#d7263d", "#0e7490", "#e0a800"];
+function drawProgress(recs) {
+  if (!window.Chart) return;
+  const data = recs.slice().sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+  chProgress?.destroy(); chProgress = null;
+  if (!data.length) return;
+  chProgress = new Chart($("#chart-progress"), {
+    type: "line",
+    data: { labels: data.map((r) => r.dateISO || ""), datasets: [{ label: "タイム(秒)", data: data.map((r) => +(r.finalMs / 1000).toFixed(2)), borderColor: "#1577dd", backgroundColor: "#1577dd22", tension: 0.2, pointRadius: 4, fill: true }] },
+    options: chartOpts("秒（小さいほど速い）")
+  });
+}
+function drawOverlay(recs) {
+  if (!window.Chart) return;
+  const data = recs.slice().sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)).slice(-6);
+  chOverlay?.destroy(); chOverlay = null;
+  if (!data.length) return;
+  const base = data.reduce((a, r) => (recDists(r).length > recDists(a).length ? r : a), data[0]);
+  const labels = recDists(base).map((d) => `${d}m`);
+  const datasets = data.map((r, i) => ({ label: r.dateISO || `#${i + 1}`, data: lapsOf(r).map((ms) => +(ms / 1000).toFixed(2)), borderColor: PALETTE[i % PALETTE.length], backgroundColor: "transparent", tension: 0.2, pointRadius: 3, fill: false }));
+  chOverlay = new Chart($("#chart-overlay"), { type: "line", data: { labels, datasets }, options: chartOpts("各ラップ秒（小さいほど速い）") });
+}
+function drawLap(r) {
+  if (!window.Chart) return;
+  const dists = recDists(r), laps = lapsOf(r).map((ms) => +(ms / 1000).toFixed(2));
+  const mx = Math.max(...laps);
+  chLap?.destroy(); chLap = null;
+  chLap = new Chart($("#chart-lap"), {
+    type: "bar",
+    data: { labels: dists.map((d) => `${d}${r.distance ? "m" : ""}`), datasets: [{ label: "各ラップ(秒)", data: laps, backgroundColor: laps.map((v) => v === mx ? "#d7263d" : "#1577dd") }] },
+    options: chartOpts("各ラップ秒（小さいほど速い／赤＝最も遅い）")
+  });
 }
 
 // ── 記録者：レーン＋選手＋種目（編集可・端末間リンク） ─────
@@ -626,7 +808,7 @@ $$("[data-go]").forEach((b) => b.addEventListener("click", async () => {
   if (!(await requireUnlock())) return;  // バックオフィスはパスワード
   role = null; myLane = null;
   if (t === "members") { renderMembers(); show("screen-members"); }
-  if (t === "records") { populateFilter(); renderRecords(); show("screen-records"); }
+  if (t === "records") { renderRecordsAll(); show("screen-records"); }
 }));
 
 $$("[data-back]").forEach((b) => b.addEventListener("click", () => {
@@ -699,12 +881,23 @@ $("#mlist").addEventListener("click", (e) => {
 });
 
 // 記録
-$("#rec-filter").addEventListener("change", (e) => { recFilter = e.target.value; editingRecordId = null; renderRecords(); });
-$("#rlist").addEventListener("click", (e) => {
-  const ed = e.target.closest("[data-redit]"); if (ed) { editingRecordId = ed.dataset.redit; renderRecords(); return; }
+$("#rec-mode").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; recMode = b.dataset.rmode; analysisId = null; $("#analysis").hidden = true; renderRecordsAll(); });
+$("#rec-filter").addEventListener("change", (e) => { recFilter = e.target.value; editingRecordId = null; analysisId = null; $("#analysis").hidden = true; indivSub = "summary"; evFilter = ""; renderIndiv(); });
+$("#indiv-subtab").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; indivSub = b.dataset.sub; analysisId = null; $("#analysis").hidden = true; renderIndiv(); });
+$("#ev-filter").addEventListener("change", (e) => { evFilter = e.target.value; renderEventView(recFilter); });
+$("#sort-seg").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; sortMode = b.dataset.sort; renderEventView(recFilter); });
+$("#overlay-toggle").addEventListener("change", (e) => { overlayOn = e.target.checked; renderEventView(recFilter); });
+$("#relay-gender").addEventListener("change", (e) => { relayGenderF = e.target.value; renderRelay(); });
+$("#relay-event").addEventListener("change", (e) => { relayEventF = e.target.value; renderRelay(); });
+$("#relay-sort-seg").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; relaySort = b.dataset.sort; renderRelay(); });
+$("#rank-event").addEventListener("change", (e) => { rankEvent = e.target.value; renderRanking(); });
+$("#ana-close").addEventListener("click", () => { analysisId = null; $("#analysis").hidden = true; });
+$("#screen-records").addEventListener("click", (e) => {
+  const red = e.target.closest("[data-redit]"); if (red) { editingRecordId = red.dataset.redit; rerenderActiveList(); return; }
   const sv = e.target.closest("[data-rsave]"); if (sv) { saveRecordEdit(sv.dataset.rsave); return; }
-  const cc = e.target.closest("[data-rcancel]"); if (cc) { editingRecordId = null; renderRecords(); return; }
+  const cc = e.target.closest("[data-rcancel]"); if (cc) { editingRecordId = null; rerenderActiveList(); return; }
   const de = e.target.closest("[data-rdel]"); if (de) { deleteRecord(de.dataset.rdel); return; }
+  const op = e.target.closest("[data-open]"); if (op) { openAnalysis(op.dataset.open); return; }
 });
 
 show("screen-role");

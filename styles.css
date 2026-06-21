@@ -313,3 +313,35 @@ button { font-family: inherit; }
 /* リレーの記録表示 */
 .r-legs { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 4px 0; }
 .r-legs .leg { font-size: 13px; color: var(--ink); }
+
+/* ── 記録ページ ── */
+.recmode { width: 100%; margin: 4px 0 14px; }
+.recmode button { flex: 1; }
+.subtab { margin: 4px 0 14px; }
+.rec-pane { margin-top: 4px; }
+.sec-title { font-weight: 700; color: var(--blue-deep); margin: 18px 0 8px; font-size: 15px; }
+.chart-wrap { position: relative; height: 240px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 8px; margin-bottom: 10px; }
+.chart-wrap canvas { width: 100% !important; height: 100% !important; }
+
+.rec-card { display: flex; align-items: center; gap: 10px; padding: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 8px; cursor: pointer; }
+.rec-card:active { background: var(--blue-soft); }
+.rc-time { font-weight: 800; font-variant-numeric: tabular-nums; color: var(--blue-deep); min-width: 78px; }
+.rc-ev { flex: 1; color: var(--ink); font-size: 14px; }
+.rc-date { color: var(--muted); font-size: 13px; }
+
+.r-tap { cursor: pointer; }
+.r-tap:active { opacity: .7; }
+
+.rank-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.rank-row:active { background: var(--blue-soft); }
+.rank-row .rk { width: 28px; height: 28px; flex: none; display: grid; place-items: center; border-radius: 50%; background: var(--blue-soft); color: var(--blue-deep); font-weight: 800; font-size: 14px; }
+.rank-row:nth-child(1) .rk { background: #ffe28a; color: #7a5b00; }
+.rank-row:nth-child(2) .rk { background: #e2e8ee; color: #4a5568; }
+.rank-row:nth-child(3) .rk { background: #f3d2b3; color: #7a4a16; }
+.rk-name { flex: 1; font-size: 14px; }
+.rk-time { font-weight: 800; font-variant-numeric: tabular-nums; color: var(--ink); }
+.rk-date { color: var(--muted); font-size: 12px; min-width: 84px; text-align: right; }
+
+.analysis { margin-top: 16px; padding: 12px; background: var(--surface); border: 2px solid var(--blue); border-radius: 14px; }
+.ana-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.ana-head b { font-size: 14px; color: var(--blue-deep); }
