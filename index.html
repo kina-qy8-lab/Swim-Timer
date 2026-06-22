@@ -460,6 +460,14 @@
     <!-- 記録会：プログラム -->
     <section id="screen-program" class="screen" hidden>
       <header class="bar"><button class="ghost back" id="program-back">← 戻る</button><h2 id="program-title">プログラム</h2></header>
+      <div id="program-edit-bar" class="program-edit-bar" hidden>
+        <p class="hint">入れ替えたい2つのレーンを順にタップすると交換します（空きレーンへの移動も可・同じ距離どうしのみ）。</p>
+        <div class="row2">
+          <button id="btn-program-cancel" class="big ghost">キャンセル</button>
+          <button id="btn-program-confirm" class="big blue">確定する</button>
+        </div>
+      </div>
+      <button id="program-edit-btn" class="big ghost" hidden>✏️ 組み分けを修正する</button>
       <div id="program-list" class="program-list"></div>
     </section>
 
@@ -490,6 +498,6 @@
   <div id="flash" aria-hidden="true"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script type="module" src="./app.js?v=20260623a"></script>
+  <script type="module" src="./app.js?v=20260623b"></script>
 </body>
 </html>

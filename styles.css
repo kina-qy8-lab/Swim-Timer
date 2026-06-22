@@ -464,3 +464,12 @@ button { font-family: inherit; }
 .pname .pst { font-size: 11px; color: var(--orange-deep); font-weight: 700; }
 .pseed { font-variant-numeric: tabular-nums; font-size: 13px; color: var(--muted); }
 .presult { font-variant-numeric: tabular-nums; font-weight: 800; color: var(--blue-deep); min-width: 56px; text-align: right; }
+
+/* ── プログラム編集 ── */
+.program-edit-bar { background: #fff8f0; border: 1px solid var(--orange); border-radius: 12px; padding: 10px 12px; margin: 8px 0 12px; }
+.program-edit-bar .row2 { display: flex; gap: 10px; }
+.program-edit-bar .row2 .big { flex: 1; margin: 0; }
+.prace.editable .prow.tap { cursor: pointer; }
+.prace.editable .prow.tap:active { background: var(--blue-soft); }
+.prow.sel { background: #fff0e0; box-shadow: inset 0 0 0 2px var(--orange); border-radius: 8px; }
+#program-edit-btn { margin-bottom: 12px; }
