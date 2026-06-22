@@ -28,6 +28,7 @@
           <span class="role-desc">レーンを担当してラップ・ゴールを記録</span>
         </button>
       </div>
+      <div id="top-meets" class="top-meets"></div>
       <div class="util-row">
         <button class="ghost" data-go="meets">🏁 記録会</button>
         <button class="ghost" data-go="members">👥 メンバー登録</button>
@@ -218,6 +219,7 @@
         </div>
       </div>
       <label class="check show-retired"><input id="show-retired" type="checkbox" /><span>引退した選手も表示する</span></label>
+      <label class="check show-retired"><input id="show-guests" type="checkbox" /><span>ゲストの一覧を表示する</span></label>
       <div class="mlist" id="mlist"></div>
     </section>
 
@@ -410,6 +412,7 @@
       <button id="btn-meet-entry" class="big blue">✏️ エントリー</button>
       <button id="btn-meet-seed" class="big ghost">🧩 組み分け（自動シード）</button>
       <button id="btn-meet-program" class="big ghost">📋 プログラム / リザルト</button>
+      <button id="meet-copy-link" class="big ghost">🔗 他校用リンクをコピー</button>
       <button id="btn-meet-delete" class="text-danger">この記録会を削除</button>
     </section>
 
@@ -479,6 +482,6 @@
   <div id="flash" aria-hidden="true"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script type="module" src="./app.js"></script>
+  <script type="module" src="./app.js?v=20260622b"></script>
 </body>
 </html>

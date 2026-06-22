@@ -437,3 +437,9 @@ button { font-family: inherit; }
 .er-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 .er-seed { font-variant-numeric: tabular-nums; font-weight: 700; }
 .er-del { background: none; border: none; color: var(--red); font-size: 12px; cursor: pointer; }
+
+/* ── トップ：開始前の記録会 ── */
+.top-meets { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 18px; }
+.top-meets-title { font-size: 13px; font-weight: 800; color: var(--blue-deep); margin: 4px 2px; }
+.meet-card.top { border-color: var(--orange); }
+.meet-card.top .mc-name { color: var(--orange-deep); }

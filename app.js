@@ -75,6 +75,11 @@ let entryKind = "indiv";       // indiv | relay
 let newMeetSchools = [];
 let newMeetHasOther = false;
 let meetPoolNew = 50;
+let showGuests = false;
+let meetRestricted = false;   // エントリー＋プログラムのみの制限ビュー
+let guestLink = false;        // 他校用リンクから入った
+let pendingEntrySwimmer = null;
+let meetsLoaded = false;
 
 const serverNow = () => Date.now() + serverOffset;
 const todayISO = () => {
@@ -217,13 +222,20 @@ onValue(ref(db, ".info/connected"), (s) => {
   $("#conn-text").textContent = c ? "接続OK" : "未接続";
 });
 onValue(ref(db, RACE), (s) => { race = s.val(); onRaceChanged(); });
-onValue(ref(db, MEMBERS), (s) => { members = s.val() || {}; if (!$("#screen-members").hidden) renderMembers(); populatePicker(); populateFilter(); });
+onValue(ref(db, MEMBERS), (s) => {
+  members = s.val() || {};
+  if (!$("#screen-members").hidden) renderMembers();
+  populatePicker(); populateFilter();
+  if (!$("#screen-entry").hidden) { refreshEntrySwimmers(); refreshRelayLegs(); }
+});
 onValue(ref(db, RESULTS), (s) => { results = s.val() || {}; if (!$("#screen-records").hidden) renderRecordsAll(); });
 onValue(ref(db, MEETS), (s) => {
   meets = s.val() || {};
+  meetsLoaded = true;
   if (!$("#screen-meets").hidden) renderMeets();
   if (!$("#screen-meet").hidden) renderMeet();
   if (!$("#screen-entry").hidden) renderEntryList();
+  if (!$("#screen-role").hidden) renderTopMeets();
 });
 onValue(ref(db, `${SETTINGS}/viewPassHash`), (s) => { viewPassHash = s.val() || null; });
 
@@ -509,8 +521,13 @@ function toggleRetire(id) {
 function renderMembers() {
   const wrap = $("#mlist");
   let list = memberList();
-  if (!showRetired) list = list.filter((m) => !m.retired);
-  if (!list.length) { wrap.innerHTML = `<p class="empty">${showRetired ? "まだ登録がありません。" : "表示できるメンバーがいません（引退者のみ）。"}</p>`; return; }
+  if (showGuests) {
+    list = list.filter((m) => m.guest);
+  } else {
+    list = list.filter((m) => !m.guest);
+    if (!showRetired) list = list.filter((m) => !m.retired);
+  }
+  if (!list.length) { wrap.innerHTML = `<p class="empty">${showGuests ? "ゲストはいません。" : (showRetired ? "まだ登録がありません。" : "表示できるメンバーがいません。")}</p>`; return; }
   wrap.innerHTML = list.map((m) => `
     <div class="member-row${editingMemberId === m.id ? " editing" : ""}${m.retired ? " retired" : ""}">
       <div class="m-main"><span class="m-name">${escapeHtml(m.name)}</span>${m.guest ? `<span class="tag guest">ゲスト</span>` : ""}${m.retired ? `<span class="tag retired-tag">引退</span>` : ""}</div>
@@ -612,7 +629,7 @@ function swimmerRecs(id) { return allRecs().filter((r) => !r.isRelay && r.member
 function populateFilter() {
   const sel = $("#rec-filter"); if (!sel) return;
   const cur = sel.value;
-  const list = memberList().filter((m) => !m.retired || showRetiredRec || m.id === recFilter);
+  const list = memberList().filter((m) => (!m.retired || showRetiredRec || m.id === recFilter) && (!m.guest || m.id === recFilter));
   sel.innerHTML = `<option value="">— 選手を選択 —</option>` + list.map((m) => `<option value="${m.id}">${escapeHtml(m.name)}（${m.grade}年${m.retired ? "・引退" : ""}）</option>`).join("");
   sel.value = cur || recFilter || "";
 }
@@ -1049,7 +1066,7 @@ function resetRecorderSetup() {
   $("#btn-join").disabled = true;
 }
 function memberOptions(selId) {
-  return memberList().filter((m) => !m.retired || m.id === selId).map((m) =>
+  return memberList().filter((m) => (!m.retired || m.id === selId) && (!m.guest || m.id === selId)).map((m) =>
     `<option value="${m.id}"${m.id === selId ? " selected" : ""}>${escapeHtml(m.name)}（${m.grade}年${m.guest ? "・ゲスト" : ""}${m.retired ? "・引退" : ""}）</option>`).join("");
 }
 function populatePicker(selId) {
@@ -1228,11 +1245,39 @@ function deleteMeet() {
 
 // 記録会のハブ
 function renderMeet() {
-  const m = currentMeet(); if (!m) { show("screen-meets"); renderMeets(); return; }
+  const m = currentMeet();
+  if (!m) {
+    if (guestLink) { $("#meet-title").textContent = meetsLoaded ? "記録会が見つかりません" : "読み込み中…"; $("#meet-meta").textContent = ""; $("#meet-entry-count").textContent = ""; return; }
+    show("screen-meets"); renderMeets(); return;
+  }
   $("#meet-title").textContent = m.name || "(無題)";
   $("#meet-meta").textContent = `${m.dateISO || ""}・${m.poolLength === 50 ? "長水路" : "短水路"}${m.hasOther && (m.schools || []).length ? `・他校：${m.schools.join("、")}` : ""}`;
   const n = m.entries ? Object.keys(m.entries).length : 0;
   $("#meet-entry-count").textContent = `エントリー ${n}件`;
+  const r = meetRestricted;
+  $("#btn-meet-seed").hidden = r;
+  $("#btn-meet-delete").hidden = r;
+  $("#meet-copy-link").hidden = r;
+  $("#meet-back").style.display = guestLink ? "none" : "";
+}
+function resetMeetMode() { meetRestricted = false; guestLink = false; }
+function enterRestrictedMeet(id, fromLink) {
+  currentMeetId = id; meetRestricted = true; guestLink = !!fromLink;
+  show("screen-meet"); renderMeet();
+}
+function copyMeetLink() {
+  const url = `${location.origin}${location.pathname}?m=${currentMeetId}`;
+  const done = () => alert("他校用リンクをコピーしました。\nこのリンクからはエントリーとプログラムのみ表示されます。\n\n" + url);
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done).catch(() => prompt("コピーできない場合は手動でコピーしてください：", url));
+  else prompt("以下のリンクをコピーしてください：", url);
+}
+function renderTopMeets() {
+  const wrap = $("#top-meets"); if (!wrap) return;
+  const today = todayISO();
+  const list = meetList().filter((m) => (m.dateISO || "") >= today);
+  wrap.innerHTML = list.length
+    ? `<div class="top-meets-title">開始前の記録会</div>` + list.map((m) => `<button class="meet-card top" data-topmeet="${m.id}"><span class="mc-name">🏁 ${escapeHtml(m.name || "(無題)")}</span><span class="mc-sub">${escapeHtml(m.dateISO || "")}・タップでエントリー</span></button>`).join("")
+    : "";
 }
 
 // エントリー
@@ -1252,13 +1297,18 @@ function renderEntryForm() {
 function onEiStrokeChange() { const ds = EVENTS[$("#ei-stroke").value] || []; $("#ei-dist").innerHTML = ds.map((d) => `<option value="${d}">${d}m</option>`).join(""); }
 function onErStrokeChange() { const ds = EVENTS[$("#er-stroke").value] || []; $("#er-dist").innerHTML = ds.map((d) => `<option value="${d}">${d}m</option>`).join(""); }
 function refreshEntrySwimmers() {
+  const sel = $("#ei-swimmer"); if (!sel) return;
   const school = $("#ei-school").value;
   const isOwn = school === OWN_SCHOOL;
+  const prev = sel.value;
   const sw = swimmersOfSchool(school);
-  $("#ei-swimmer").innerHTML = `<option value="">— 氏名を選択 —</option>`
+  sel.innerHTML = `<option value="">— 氏名を選択 —</option>`
     + sw.map((m) => `<option value="${m.id}">${escapeHtml(m.name)}（${m.grade}年）</option>`).join("")
     + (isOwn ? "" : `<option value="__guest">＋ 新規ゲスト登録</option>`);
-  $("#ei-guest-fields").hidden = true;
+  const want = pendingEntrySwimmer || prev;
+  if (want && [...sel.options].some((o) => o.value === want)) sel.value = want;
+  pendingEntrySwimmer = null;
+  onEiSwimmerChange();
 }
 function onEiSwimmerChange() { $("#ei-guest-fields").hidden = $("#ei-swimmer").value !== "__guest"; }
 function refreshRelayLegs() {
@@ -1282,10 +1332,12 @@ function addIndivEntry() {
   }
   if (!stroke || !distance) { alert("種目と距離を選んでください。"); return; }
   if (seedMs == null || seedMs <= 0) { alert("エントリータイムの形式が正しくありません。\n例：28.55 または 1:05.33"); $("#ei-seed").focus(); return; }
-  if (sv === "__guest") { const gref = push(ref(db, MEMBERS)); set(gref, { name, grade, gender, school, guest: true, createdAt: serverTimestamp() }); memberId = gref.key; }
+  if (sv === "__guest") { const gref = push(ref(db, MEMBERS)); set(gref, { name, grade, gender, school, guest: true, createdAt: serverTimestamp() }); memberId = gref.key; pendingEntrySwimmer = gref.key; }
   const entry = { isRelay: false, school, memberId, name, grade, gender, stroke, distance, seedMs, createdAt: serverTimestamp() };
   set(push(ref(db, `${MEETS}/${currentMeetId}/entries`)), entry);
-  $("#ei-seed").value = ""; $("#ei-swimmer").value = ""; $("#ei-guest-fields").hidden = true; $("#ei-guest-name").value = "";
+  $("#ei-seed").value = ""; $("#ei-guest-name").value = "";
+  if (sv === "__guest") { $("#ei-swimmer").value = ""; $("#ei-guest-fields").hidden = true; }
+  $("#ei-seed").focus();
   renderEntryList();
 }
 function addRelayEntry() {
@@ -1347,14 +1399,21 @@ $$("[data-back]").forEach((b) => b.addEventListener("click", () => {
 // 記録会：ナビ
 $("#btn-meet-new").addEventListener("click", openMeetNew);
 $("#meet-new-back").addEventListener("click", () => { show("screen-meets"); renderMeets(); });
-$("#meet-back").addEventListener("click", () => { show("screen-meets"); renderMeets(); });
+$("#meet-back").addEventListener("click", () => {
+  if (meetRestricted && !guestLink) { resetMeetMode(); show("screen-role"); renderTopMeets(); return; }
+  resetMeetMode(); show("screen-meets"); renderMeets();
+});
 $("#entry-back").addEventListener("click", () => { show("screen-meet"); renderMeet(); });
 $("#btn-meet-create").addEventListener("click", createMeet);
 $("#btn-meet-delete").addEventListener("click", deleteMeet);
 $("#btn-meet-entry").addEventListener("click", openEntry);
 $("#btn-meet-seed").addEventListener("click", () => alert("組み分け（自動シード）はフェーズ2で実装します。"));
 $("#btn-meet-program").addEventListener("click", () => alert("プログラム表示はフェーズ2で実装します。"));
-$("#meet-list").addEventListener("click", (e) => { const b = e.target.closest("[data-meet]"); if (!b) return; currentMeetId = b.dataset.meet; show("screen-meet"); renderMeet(); });
+$("#meet-copy-link").addEventListener("click", copyMeetLink);
+$("#meet-list").addEventListener("click", (e) => { const b = e.target.closest("[data-meet]"); if (!b) return; resetMeetMode(); currentMeetId = b.dataset.meet; show("screen-meet"); renderMeet(); });
+$("#top-meets").addEventListener("click", (e) => { const b = e.target.closest("[data-topmeet]"); if (!b) return; enterRestrictedMeet(b.dataset.topmeet, false); });
+// メンバー：ゲスト表示切替
+$("#show-guests").addEventListener("change", (e) => { showGuests = e.target.checked; renderMembers(); });
 // 記録会：新規作成フォーム
 $("#meet-pool-seg").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; meetPoolNew = Number(b.dataset.pool); $$("#meet-pool-seg button").forEach((x) => x.classList.toggle("on", x === b)); });
 $("#meet-other-seg").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; newMeetHasOther = b.dataset.other === "yes"; $$("#meet-other-seg button").forEach((x) => x.classList.toggle("on", x === b)); $("#meet-schools-area").hidden = !newMeetHasOther; });
@@ -1477,3 +1536,13 @@ document.querySelector(".lap-quick").addEventListener("click", (e) => { const b 
 $("#btn-save-manual").addEventListener("click", saveManual);
 
 show("screen-role");
+
+// 他校用リンク（?m=記録会ID）で入った場合は、制限ビューへ
+(function initFromURL() {
+  const m = new URLSearchParams(location.search).get("m");
+  if (!m) return;
+  currentMeetId = m; meetRestricted = true; guestLink = true;
+  $("#meet-title").textContent = "読み込み中…"; $("#meet-meta").textContent = ""; $("#meet-entry-count").textContent = "";
+  $("#btn-meet-seed").hidden = true; $("#btn-meet-delete").hidden = true; $("#meet-copy-link").hidden = true; $("#meet-back").style.display = "none";
+  show("screen-meet");
+})();
