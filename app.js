@@ -53,8 +53,10 @@ let indivSub = "summary";     // summary | event
 let evFilter = "";            // 個人・種目の種目キー
 let sortMode = "date";        // date | time
 let overlayOn = false;
+let showRetiredRec = false;
 let relayGenderF = "";
 let relayEventF = "";
+let relayYearF = null;
 let relaySort = "date";
 let rankEvent = "";
 let analysisId = null;
@@ -329,9 +331,11 @@ function renderFinished() {
 function saveFinished() {
   if (!finishedResult || finishedSaved) return;
   set(push(ref(db, RESULTS)), finishedResult);
+  const ind = firstLegIndividual(finishedResult);
+  if (ind) set(push(ref(db, RESULTS)), ind);
   finishedSaved = true;
   $("#btn-rec-save").disabled = true;
-  $("#rec-review .review-msg").textContent = "✓ 保存しました";
+  $("#rec-review .review-msg").textContent = ind ? "✓ 保存しました（第1泳者の個人記録も追加）" : "✓ 保存しました";
 }
 function nextRecord() {
   if (!finishedSaved) { $("#unsaved-modal").hidden = false; return; }
@@ -542,6 +546,47 @@ function relayGender(r) {
   if (gs.every((g) => g === "女")) return "女子";
   return "混合";
 }
+// リレー第1泳者の記録を、個人種目の記録として作る（正式記録扱い）。
+function firstLegIndividual(r) {
+  if (!r.isRelay || !(r.legs || []).length || !r.distance) return null;
+  const leg = r.legs[0];
+  if (!leg.memberId) return null;
+  const legCount = r.legs.length, legDist = r.distance / legCount;
+  const dists = recDists(r), splits = r.splits || [];
+  const firstSplits = [], firstDists = [];
+  for (let i = 0; i < splits.length; i++) {
+    if (dists[i] <= legDist + 0.5) { firstSplits.push(splits[i]); firstDists.push(dists[i]); } else break;
+  }
+  if (!firstSplits.length || Math.abs(firstDists[firstDists.length - 1] - legDist) > 0.5) return null;
+  const stroke = leg.legStroke || (r.stroke === "メドレーリレー" ? "背泳ぎ" : "自由形");
+  const rec = {
+    memberId: leg.memberId, name: leg.name, school: leg.school || "",
+    dateISO: r.dateISO, poolLength: r.poolLength || null, lapMode: r.lapMode || null,
+    stroke, distance: legDist, splits: firstSplits.slice(), splitDists: firstDists.slice(),
+    finalMs: firstSplits[firstSplits.length - 1], fromRelay: true, createdAt: serverTimestamp()
+  };
+  if (r.meetName) rec.meetName = r.meetName;
+  return rec;
+}
+// 既存のリレー記録から、第1泳者の個人記録をまとめて作成（重複は作らない）
+function backfillFirstLeg() {
+  const relays = allRecs().filter((r) => r.isRelay);
+  if (!relays.length) { alert("リレーの記録がありません。"); return; }
+  if (!confirm("既存のリレー記録から、第1泳者の個人記録を作成します。\n（すでに反映済みのものは作成しません）よろしいですか？")) return;
+  const sig = (mid, st, di, da, fm) => `${mid}|${st}|${di}|${da}|${Math.round((fm || 0) / 10)}`;
+  const have = new Set(allRecs().filter((r) => !r.isRelay).map((r) => sig(r.memberId, r.stroke, r.distance, r.dateISO, r.finalMs)));
+  let created = 0;
+  relays.forEach((r) => {
+    const ind = firstLegIndividual(r);
+    if (!ind) return;
+    const s = sig(ind.memberId, ind.stroke, ind.distance, ind.dateISO, ind.finalMs);
+    if (have.has(s)) return;
+    set(push(ref(db, RESULTS)), ind);
+    have.add(s); created++;
+  });
+  alert(created ? `${created}件の個人記録を追加しました。` : "追加対象はありませんでした（すでに反映済みです）。");
+  renderRecordsAll();
+}
 function sortRecs(list, mode) {
   if (mode === "time") list.sort((a, b) => (a.finalMs || 0) - (b.finalMs || 0));
   else list.sort((a, b) => (b.dateISO || "").localeCompare(a.dateISO || "") || (b.createdAt || 0) - (a.createdAt || 0));
@@ -552,7 +597,8 @@ function swimmerRecs(id) { return allRecs().filter((r) => !r.isRelay && r.member
 function populateFilter() {
   const sel = $("#rec-filter"); if (!sel) return;
   const cur = sel.value;
-  sel.innerHTML = `<option value="">— 選手を選択 —</option>` + memberList().map((m) => `<option value="${m.id}">${escapeHtml(m.name)}（${m.grade}年${m.retired ? "・引退" : ""}）</option>`).join("");
+  const list = memberList().filter((m) => !m.retired || showRetiredRec || m.id === recFilter);
+  sel.innerHTML = `<option value="">— 選手を選択 —</option>` + list.map((m) => `<option value="${m.id}">${escapeHtml(m.name)}（${m.grade}年${m.retired ? "・引退" : ""}）</option>`).join("");
   sel.value = cur || recFilter || "";
 }
 function renderRecordsAll() {
@@ -620,18 +666,30 @@ function renderEventView(id) {
 
 // ── リレー ──
 function renderRelay() {
-  let recs = allRecs().filter((r) => r.isRelay);
-  const evs = [...new Set(recs.map(evKey))];
-  const esel = $("#relay-event"); const ecur = esel.value;
+  const allRelay = allRecs().filter((r) => r.isRelay);
+  // 年度プルダウン（データのある年度＋今年度）
+  const cfy = currentFiscalYear();
+  const years = [...new Set(allRelay.map((r) => fiscalYear(r.dateISO)).filter((y) => y != null))];
+  if (!years.includes(cfy)) years.push(cfy);
+  years.sort((a, b) => b - a);
+  if (relayYearF == null) relayYearF = cfy;
+  const ysel = $("#relay-year");
+  ysel.innerHTML = years.map((y) => `<option value="${y}">${y}年度</option>`).join("");
+  ysel.value = String(relayYearF);
+  // 種目プルダウン
+  const evs = [...new Set(allRelay.map(evKey))];
+  const esel = $("#relay-event");
   esel.innerHTML = `<option value="">全て</option>` + evs.map((k) => `<option value="${k}">${escapeHtml(evLabelFromKey(k))}</option>`).join("");
   esel.value = (relayEventF && evs.includes(relayEventF)) ? relayEventF : "";
   relayEventF = esel.value;
   $("#relay-gender").value = relayGenderF;
+  // 絞り込み
+  let recs = allRelay.filter((r) => fiscalYear(r.dateISO) === Number(relayYearF));
   if (relayGenderF) recs = recs.filter((r) => relayGender(r) === relayGenderF);
   if (relayEventF) recs = recs.filter((r) => evKey(r) === relayEventF);
   $$("#relay-sort-seg button").forEach((b) => b.classList.toggle("on", b.dataset.sort === relaySort));
   sortRecs(recs, relaySort);
-  $("#relay-list").innerHTML = recs.length ? recs.map(recordCardHtml).join("") : `<p class="empty">リレーの記録がありません。</p>`;
+  $("#relay-list").innerHTML = recs.length ? recs.map(recordCardHtml).join("") : `<p class="empty">この年度のリレー記録がありません。</p>`;
 }
 
 // ── ランキング ──
@@ -680,7 +738,7 @@ function recordCardHtml(r) {
   return `<div class="record-row" data-rec="${r.id}">
     <div class="r-tap" data-open="${r.id}">
       <div class="r-head"><span class="r-final">${fmt(r.finalMs)}</span><span class="r-name">${who}</span><span class="r-meta">${escapeHtml(evLabel(r))}</span></div>
-      <div class="r-sub">${r.meetName ? `🏆 ${escapeHtml(r.meetName)}・` : ""}${escapeHtml(r.dateISO || "")}${r.lane ? `・L${r.lane}` : ""}${r.school ? `・${escapeHtml(r.school)}` : ""}</div>
+      <div class="r-sub">${r.meetName ? `🏆 ${escapeHtml(r.meetName)}・` : ""}${escapeHtml(r.dateISO || "")}${r.lane ? `・L${r.lane}` : ""}${r.school ? `・${escapeHtml(r.school)}` : ""}${r.fromRelay ? "・リレー第1泳" : ""}</div>
       ${relayLegs}<div class="r-laps">${laps}</div>
     </div>
     <div class="r-actions"><button class="ghost" data-open="${r.id}">📊 分析</button><button class="edit" data-redit="${r.id}">修正</button><button class="del" data-rdel="${r.id}">削除</button></div>
@@ -957,7 +1015,8 @@ function saveManual() {
     else { if (!sv || !members[sv]) { alert("選手を選んでください（未登録ならメンバー登録から追加）。"); return; } const m = members[sv]; rec.memberId = sv; rec.name = m.name; rec.school = m.school || ""; }
   }
   set(push(ref(db, RESULTS)), rec);
-  alert("保存しました。");
+  if (rec.isRelay) { const ind = firstLegIndividual(rec); if (ind) set(push(ref(db, RESULTS)), ind); }
+  alert(rec.isRelay && firstLegIndividual(rec) ? "保存しました（第1泳者の個人記録も追加）。" : "保存しました。");
   recMode = manualKind === "relay" ? "relay" : "indiv";
   if (manualKind !== "relay" && rec.memberId) { recFilter = rec.memberId; indivSub = "summary"; }
   show("screen-records"); renderRecordsAll();
@@ -1176,7 +1235,10 @@ $("#indiv-subtab").addEventListener("click", (e) => { const b = e.target.closest
 $("#ev-filter").addEventListener("change", (e) => { evFilter = e.target.value; renderEventView(recFilter); });
 $("#sort-seg").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; sortMode = b.dataset.sort; renderEventView(recFilter); });
 $("#overlay-toggle").addEventListener("change", (e) => { overlayOn = e.target.checked; renderEventView(recFilter); });
+$("#rec-show-retired").addEventListener("change", (e) => { showRetiredRec = e.target.checked; populateFilter(); });
 $("#relay-gender").addEventListener("change", (e) => { relayGenderF = e.target.value; renderRelay(); });
+$("#relay-year").addEventListener("change", (e) => { relayYearF = Number(e.target.value); renderRelay(); });
+$("#btn-backfill-relay").addEventListener("click", backfillFirstLeg);
 $("#relay-event").addEventListener("change", (e) => { relayEventF = e.target.value; renderRelay(); });
 $("#relay-sort-seg").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; relaySort = b.dataset.sort; renderRelay(); });
 $("#rank-event").addEventListener("change", (e) => { rankEvent = e.target.value; renderRanking(); });

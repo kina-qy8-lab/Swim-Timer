@@ -238,6 +238,7 @@
         <label class="field"><span>選手</span>
           <select id="rec-filter"><option value="">— 選手を選択 —</option></select>
         </label>
+        <label class="check show-retired"><input id="rec-show-retired" type="checkbox" /><span>引退した選手も表示する</span></label>
         <div id="indiv-body" hidden>
           <div class="seg subtab" id="indiv-subtab">
             <button data-sub="summary" class="on">まとめ</button>
@@ -270,6 +271,7 @@
 
       <!-- リレー -->
       <div id="pane-relay" class="rec-pane" hidden>
+        <label class="field"><span>年度</span><select id="relay-year"></select></label>
         <div class="frow">
           <label class="field"><span>男女</span>
             <select id="relay-gender"><option value="">全て</option><option value="男子">男子</option><option value="女子">女子</option><option value="混合">混合</option></select>
@@ -279,6 +281,7 @@
         <div class="seg" id="relay-sort-seg"><button data-sort="date" class="on">日付順</button><button data-sort="time">タイム順</button></div>
         <div class="sec-title">レース一覧（タップで分析）</div>
         <div id="relay-list"></div>
+        <button id="btn-backfill-relay" class="ghost backfill-btn">既存リレーから第1泳者の個人記録を作成</button>
       </div>
 
       <!-- ランキング -->
