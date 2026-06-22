@@ -19,6 +19,8 @@ const RACE     = "session/race";
 const MEMBERS  = "members";
 const RESULTS  = "practiceResults";
 const SETTINGS = "settings";
+const MEETS    = "meets";
+const OWN_SCHOOL = "鎌倉高校";
 
 // 種目と距離
 const EVENTS = {
@@ -66,6 +68,13 @@ let viewPassHash = null;
 let ending = false;
 let joinedRaceId = null;
 let recFinished = false, finishedResult = null, finishedSaved = false;
+// 記録会（フェーズ1）
+let meets = {};
+let currentMeetId = null;
+let entryKind = "indiv";       // indiv | relay
+let newMeetSchools = [];
+let newMeetHasOther = false;
+let meetPoolNew = 50;
 
 const serverNow = () => Date.now() + serverOffset;
 const todayISO = () => {
@@ -210,6 +219,12 @@ onValue(ref(db, ".info/connected"), (s) => {
 onValue(ref(db, RACE), (s) => { race = s.val(); onRaceChanged(); });
 onValue(ref(db, MEMBERS), (s) => { members = s.val() || {}; if (!$("#screen-members").hidden) renderMembers(); populatePicker(); populateFilter(); });
 onValue(ref(db, RESULTS), (s) => { results = s.val() || {}; if (!$("#screen-records").hidden) renderRecordsAll(); });
+onValue(ref(db, MEETS), (s) => {
+  meets = s.val() || {};
+  if (!$("#screen-meets").hidden) renderMeets();
+  if (!$("#screen-meet").hidden) renderMeet();
+  if (!$("#screen-entry").hidden) renderEntryList();
+});
 onValue(ref(db, `${SETTINGS}/viewPassHash`), (s) => { viewPassHash = s.val() || null; });
 
 // ── スターター操作 ─────────────────────────────────────
@@ -1138,6 +1153,175 @@ function tick() {
 }
 requestAnimationFrame(tick);
 
+// ══ 記録会（フェーズ1：作成・エントリー） ══════════════
+function meetList() {
+  return Object.entries(meets).map(([id, m]) => ({ id, ...m }))
+    .sort((a, b) => (b.dateISO || "").localeCompare(a.dateISO || "") || (b.createdAt || 0) - (a.createdAt || 0));
+}
+function currentMeet() { return meets[currentMeetId] || null; }
+function meetSchools() { const m = currentMeet(); return [OWN_SCHOOL, ...((m && m.schools) || [])]; }
+function allKnownSchools() {
+  const set = new Set();
+  Object.values(meets).forEach((m) => (m.schools || []).forEach((s) => set.add(s)));
+  return [...set].sort((a, b) => a.localeCompare(b, "ja"));
+}
+function swimmersOfSchool(school) {
+  return memberList().filter((m) => (m.school || OWN_SCHOOL) === school && !m.retired);
+}
+
+// 記録会一覧
+function renderMeets() {
+  const list = meetList();
+  $("#meet-list").innerHTML = list.length ? list.map((m) => {
+    const n = m.entries ? Object.keys(m.entries).length : 0;
+    return `<button class="meet-card" data-meet="${m.id}"><span class="mc-name">${escapeHtml(m.name || "(無題)")}</span><span class="mc-sub">${escapeHtml(m.dateISO || "")}・${m.poolLength === 50 ? "長水路" : "短水路"}・エントリー${n}件</span></button>`;
+  }).join("") : `<p class="empty">記録会がありません。「新しい記録会を作成」から追加してください。</p>`;
+}
+
+// 記録会の新規作成フォーム
+function openMeetNew() {
+  newMeetSchools = []; newMeetHasOther = false; meetPoolNew = 50;
+  $("#meet-name").value = "";
+  $("#meet-date").value = todayISO();
+  $$("#meet-pool-seg button").forEach((b) => b.classList.toggle("on", Number(b.dataset.pool) === 50));
+  $$("#meet-other-seg button").forEach((b) => b.classList.toggle("on", b.dataset.other === "no"));
+  $("#meet-schools-area").hidden = true;
+  renderMeetSchools();
+  show("screen-meet-new");
+}
+function renderMeetSchools() {
+  $("#meet-schools-list").innerHTML = newMeetSchools.length
+    ? newMeetSchools.map((s, i) => `<span class="school-chip">${escapeHtml(s)}<button data-rm-school="${i}" type="button">✕</button></span>`).join("")
+    : `<span class="muted">（参加校が未設定）</span>`;
+  const past = allKnownSchools().filter((s) => !newMeetSchools.includes(s));
+  $("#meet-school-past").innerHTML = `<option value="">過去の学校から追加…</option>` + past.map((s) => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join("");
+}
+function addNewMeetSchool(name) {
+  name = (name || "").trim();
+  if (!name) return;
+  if (name === OWN_SCHOOL) { alert("自校はエントリー時に自動で選べます。他校名を入力してください。"); return; }
+  if (newMeetSchools.includes(name)) { alert("すでに追加済みです。"); return; }
+  newMeetSchools.push(name);
+  renderMeetSchools();
+}
+function createMeet() {
+  const name = $("#meet-name").value.trim();
+  if (!name) { alert("記録会名を入力してください。"); return; }
+  if (newMeetHasOther && !newMeetSchools.length) { alert("他校参加「有」のときは、参加校を1校以上設定してください。"); return; }
+  const meet = {
+    name, dateISO: $("#meet-date").value || todayISO(), poolLength: meetPoolNew,
+    hasOther: newMeetHasOther, schools: newMeetHasOther ? newMeetSchools.slice() : [],
+    createdAt: serverTimestamp()
+  };
+  const r = push(ref(db, MEETS));
+  set(r, meet);
+  currentMeetId = r.key;
+  show("screen-meet"); renderMeet();
+}
+function deleteMeet() {
+  const m = currentMeet(); if (!m) return;
+  if (!confirm(`記録会「${m.name}」を削除しますか？\nエントリーも消えます（保存済みの記録は残ります）。`)) return;
+  remove(ref(db, `${MEETS}/${currentMeetId}`));
+  currentMeetId = null;
+  show("screen-meets"); renderMeets();
+}
+
+// 記録会のハブ
+function renderMeet() {
+  const m = currentMeet(); if (!m) { show("screen-meets"); renderMeets(); return; }
+  $("#meet-title").textContent = m.name || "(無題)";
+  $("#meet-meta").textContent = `${m.dateISO || ""}・${m.poolLength === 50 ? "長水路" : "短水路"}${m.hasOther && (m.schools || []).length ? `・他校：${m.schools.join("、")}` : ""}`;
+  const n = m.entries ? Object.keys(m.entries).length : 0;
+  $("#meet-entry-count").textContent = `エントリー ${n}件`;
+}
+
+// エントリー
+function openEntry() { entryKind = "indiv"; show("screen-entry"); renderEntryForm(); renderEntryList(); }
+function renderEntryForm() {
+  $$("#entry-kind-seg button").forEach((b) => b.classList.toggle("on", b.dataset.ek === entryKind));
+  $("#entry-indiv").hidden = entryKind !== "indiv";
+  $("#entry-relay").hidden = entryKind !== "relay";
+  const optS = meetSchools().map((s) => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join("");
+  $("#ei-school").innerHTML = optS;
+  $("#er-school").innerHTML = optS;
+  $("#ei-stroke").innerHTML = INDIV_STROKES.map((s) => `<option>${s}</option>`).join("");
+  $("#er-stroke").innerHTML = RELAY_STROKES.map((s) => `<option>${s}</option>`).join("");
+  onEiStrokeChange(); onErStrokeChange();
+  refreshEntrySwimmers(); refreshRelayLegs();
+}
+function onEiStrokeChange() { const ds = EVENTS[$("#ei-stroke").value] || []; $("#ei-dist").innerHTML = ds.map((d) => `<option value="${d}">${d}m</option>`).join(""); }
+function onErStrokeChange() { const ds = EVENTS[$("#er-stroke").value] || []; $("#er-dist").innerHTML = ds.map((d) => `<option value="${d}">${d}m</option>`).join(""); }
+function refreshEntrySwimmers() {
+  const school = $("#ei-school").value;
+  const isOwn = school === OWN_SCHOOL;
+  const sw = swimmersOfSchool(school);
+  $("#ei-swimmer").innerHTML = `<option value="">— 氏名を選択 —</option>`
+    + sw.map((m) => `<option value="${m.id}">${escapeHtml(m.name)}（${m.grade}年）</option>`).join("")
+    + (isOwn ? "" : `<option value="__guest">＋ 新規ゲスト登録</option>`);
+  $("#ei-guest-fields").hidden = true;
+}
+function onEiSwimmerChange() { $("#ei-guest-fields").hidden = $("#ei-swimmer").value !== "__guest"; }
+function refreshRelayLegs() {
+  const sw = swimmersOfSchool($("#er-school").value);
+  const opts = `<option value="">— 選択 —</option>` + sw.map((m) => `<option value="${m.id}">${escapeHtml(m.name)}（${m.grade}年）</option>`).join("");
+  $$(".er-leg").forEach((sel) => { const cur = sel.value; sel.innerHTML = opts; sel.value = cur; });
+}
+function addIndivEntry() {
+  if (!currentMeet()) return;
+  const school = $("#ei-school").value, stroke = $("#ei-stroke").value, distance = Number($("#ei-dist").value);
+  const seedMs = parseTime($("#ei-seed").value.trim());
+  let memberId = null, name = "", grade = null, gender = "";
+  const sv = $("#ei-swimmer").value;
+  if (sv === "__guest") {
+    name = $("#ei-guest-name").value.trim();
+    grade = Number($("#ei-guest-grade").value); gender = $("#ei-guest-gender").value;
+    if (!name) { alert("ゲストの氏名を入力してください。"); return; }
+  } else {
+    if (!sv || !members[sv]) { alert("氏名を選択してください。"); return; }
+    const mm = members[sv]; memberId = sv; name = mm.name; grade = mm.grade; gender = mm.gender;
+  }
+  if (!stroke || !distance) { alert("種目と距離を選んでください。"); return; }
+  if (seedMs == null || seedMs <= 0) { alert("エントリータイムの形式が正しくありません。\n例：28.55 または 1:05.33"); $("#ei-seed").focus(); return; }
+  if (sv === "__guest") { const gref = push(ref(db, MEMBERS)); set(gref, { name, grade, gender, school, guest: true, createdAt: serverTimestamp() }); memberId = gref.key; }
+  const entry = { isRelay: false, school, memberId, name, grade, gender, stroke, distance, seedMs, createdAt: serverTimestamp() };
+  set(push(ref(db, `${MEETS}/${currentMeetId}/entries`)), entry);
+  $("#ei-seed").value = ""; $("#ei-swimmer").value = ""; $("#ei-guest-fields").hidden = true; $("#ei-guest-name").value = "";
+  renderEntryList();
+}
+function addRelayEntry() {
+  if (!currentMeet()) return;
+  const school = $("#er-school").value, stroke = $("#er-stroke").value, distance = Number($("#er-dist").value);
+  const seedMs = parseTime($("#er-seed").value.trim());
+  const raw = $$(".er-leg").map((s) => s.value);
+  if (raw.some((v) => !v)) { alert("第1〜第4泳者をすべて選択してください。"); return; }
+  if (new Set(raw).size !== 4) { alert("同じ選手が重複しています。"); return; }
+  if (!distance) { alert("距離を選んでください。"); return; }
+  if (seedMs == null || seedMs <= 0) { alert("エントリータイムの形式が正しくありません。\n例：1:45.20"); $("#er-seed").focus(); return; }
+  const legs = raw.map((id, i) => { const mm = members[id]; return { memberId: id, name: mm.name, grade: mm.grade, gender: mm.gender, legStroke: stroke === "メドレーリレー" ? MEDLEY_ORDER[i] : "自由形" }; });
+  const entry = { isRelay: true, school, stroke, distance, seedMs, legs, name: legs.map((l) => l.name).join("→"), createdAt: serverTimestamp() };
+  set(push(ref(db, `${MEETS}/${currentMeetId}/entries`)), entry);
+  $("#er-seed").value = ""; $$(".er-leg").forEach((s) => (s.value = ""));
+  renderEntryList();
+}
+function renderEntryList() {
+  const m = currentMeet();
+  const entries = m && m.entries ? Object.entries(m.entries).map(([id, e]) => ({ id, ...e })) : [];
+  entries.sort((a, b) => (a.distance - b.distance) || String(a.stroke).localeCompare(b.stroke) || (a.seedMs - b.seedMs));
+  $("#entry-count2").textContent = `エントリー ${entries.length}件`;
+  $("#entry-list").innerHTML = entries.length ? entries.map((e) => {
+    const ev = `${e.stroke} ${e.distance}m`;
+    const who = e.isRelay
+      ? `🏊 ${escapeHtml(e.school)}（${e.legs.map((l) => escapeHtml(l.name)).join("・")}）`
+      : `${escapeHtml(e.name)}（${escapeHtml(e.school)}）`;
+    return `<div class="entry-row"><div class="er-main"><span class="er-ev">${ev}</span><span class="er-who">${who}</span></div><div class="er-right"><span class="er-seed">${fmt(e.seedMs)}</span><button class="er-del" data-del-entry="${e.id}">削除</button></div></div>`;
+  }).join("") : `<p class="empty">まだエントリーがありません。</p>`;
+}
+function deleteEntry(id) {
+  if (!confirm("このエントリーを削除しますか？")) return;
+  remove(ref(db, `${MEETS}/${currentMeetId}/entries/${id}`));
+  renderEntryList();
+}
+
 // ── イベント結線 ───────────────────────────────────────
 $$(".role-btn").forEach((b) => b.addEventListener("click", () => {
   role = b.dataset.role;
@@ -1151,6 +1335,7 @@ $$("[data-go]").forEach((b) => b.addEventListener("click", async () => {
   role = null; myLane = null;
   if (t === "members") { renderMembers(); show("screen-members"); }
   if (t === "records") { renderRecordsAll(); show("screen-records"); }
+  if (t === "meets") { renderMeets(); show("screen-meets"); }
 }));
 
 $$("[data-back]").forEach((b) => b.addEventListener("click", () => {
@@ -1158,6 +1343,34 @@ $$("[data-back]").forEach((b) => b.addEventListener("click", () => {
   role = null; myLane = null;
   show("screen-role");
 }));
+
+// 記録会：ナビ
+$("#btn-meet-new").addEventListener("click", openMeetNew);
+$("#meet-new-back").addEventListener("click", () => { show("screen-meets"); renderMeets(); });
+$("#meet-back").addEventListener("click", () => { show("screen-meets"); renderMeets(); });
+$("#entry-back").addEventListener("click", () => { show("screen-meet"); renderMeet(); });
+$("#btn-meet-create").addEventListener("click", createMeet);
+$("#btn-meet-delete").addEventListener("click", deleteMeet);
+$("#btn-meet-entry").addEventListener("click", openEntry);
+$("#btn-meet-seed").addEventListener("click", () => alert("組み分け（自動シード）はフェーズ2で実装します。"));
+$("#btn-meet-program").addEventListener("click", () => alert("プログラム表示はフェーズ2で実装します。"));
+$("#meet-list").addEventListener("click", (e) => { const b = e.target.closest("[data-meet]"); if (!b) return; currentMeetId = b.dataset.meet; show("screen-meet"); renderMeet(); });
+// 記録会：新規作成フォーム
+$("#meet-pool-seg").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; meetPoolNew = Number(b.dataset.pool); $$("#meet-pool-seg button").forEach((x) => x.classList.toggle("on", x === b)); });
+$("#meet-other-seg").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; newMeetHasOther = b.dataset.other === "yes"; $$("#meet-other-seg button").forEach((x) => x.classList.toggle("on", x === b)); $("#meet-schools-area").hidden = !newMeetHasOther; });
+$("#meet-school-add").addEventListener("click", () => { addNewMeetSchool($("#meet-school-input").value); $("#meet-school-input").value = ""; });
+$("#meet-school-past").addEventListener("change", (e) => { if (e.target.value) { addNewMeetSchool(e.target.value); e.target.value = ""; } });
+$("#meet-schools-list").addEventListener("click", (e) => { const b = e.target.closest("[data-rm-school]"); if (!b) return; newMeetSchools.splice(Number(b.dataset.rmSchool), 1); renderMeetSchools(); });
+// エントリー
+$("#entry-kind-seg").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; entryKind = b.dataset.ek; renderEntryForm(); });
+$("#ei-school").addEventListener("change", refreshEntrySwimmers);
+$("#ei-stroke").addEventListener("change", onEiStrokeChange);
+$("#ei-swimmer").addEventListener("change", onEiSwimmerChange);
+$("#er-school").addEventListener("change", refreshRelayLegs);
+$("#er-stroke").addEventListener("change", onErStrokeChange);
+$("#btn-add-indiv").addEventListener("click", addIndivEntry);
+$("#btn-add-relay").addEventListener("click", addRelayEntry);
+$("#entry-list").addEventListener("click", (e) => { const b = e.target.closest("[data-del-entry]"); if (b) deleteEntry(b.dataset.delEntry); });
 
 $("#pool-seg").addEventListener("click", (e) => {
   const btn = e.target.closest("button"); if (!btn) return;

@@ -29,6 +29,7 @@
         </button>
       </div>
       <div class="util-row">
+        <button class="ghost" data-go="meets">🏁 記録会</button>
         <button class="ghost" data-go="members">👥 メンバー登録</button>
         <button class="ghost" data-go="records">📋 記録を見る</button>
       </div>
@@ -362,6 +363,95 @@
       <button class="ghost" id="btn-add-lap">＋区間を追加</button>
 
       <button id="btn-save-manual" class="big blue">この記録を保存</button>
+    </section>
+
+    <!-- 記録会：一覧 -->
+    <section id="screen-meets" class="screen" hidden>
+      <header class="bar"><button class="ghost back" data-back>← 戻る</button><h2>記録会</h2></header>
+      <button id="btn-meet-new" class="big blue">＋ 新しい記録会を作成</button>
+      <div id="meet-list" class="meet-list"></div>
+    </section>
+
+    <!-- 記録会：新規作成 -->
+    <section id="screen-meet-new" class="screen" hidden>
+      <header class="bar"><button class="ghost back" id="meet-new-back">← 戻る</button><h2>記録会を作成</h2></header>
+      <label class="field"><span>記録会名</span><input id="meet-name" type="text" placeholder="例：第1回 校内記録会" /></label>
+      <div class="frow">
+        <label class="field"><span>日付</span><input id="meet-date" type="date" /></label>
+        <label class="field"><span>コース</span>
+          <div class="seg" id="meet-pool-seg"><button data-pool="25">短水路</button><button data-pool="50" class="on">長水路</button></div>
+        </label>
+      </div>
+      <label class="field"><span>他校の参加</span>
+        <div class="seg" id="meet-other-seg"><button data-other="no" class="on">無し</button><button data-other="yes">有り</button></div>
+      </label>
+      <div id="meet-schools-area" hidden>
+        <p class="hint">参加校を事前に設定します（表記揺れ防止のため、過去の学校はプルダウンから選べます）。</p>
+        <div id="meet-schools-list" class="school-chips"></div>
+        <div class="frow">
+          <label class="field"><span>過去の学校から</span><select id="meet-school-past"><option value="">過去の学校から追加…</option></select></label>
+        </div>
+        <div class="frow frow-add">
+          <label class="field"><span>新規に追加</span><input id="meet-school-input" type="text" placeholder="例：○○高校" /></label>
+          <button id="meet-school-add" class="ghost add-btn">追加</button>
+        </div>
+      </div>
+      <button id="btn-meet-create" class="big blue">この内容で作成</button>
+    </section>
+
+    <!-- 記録会：ハブ -->
+    <section id="screen-meet" class="screen" hidden>
+      <header class="bar"><button class="ghost back" id="meet-back">← 戻る</button><h2>記録会</h2></header>
+      <div class="meet-head">
+        <div id="meet-title" class="meet-title"></div>
+        <div id="meet-meta" class="meet-meta"></div>
+        <div id="meet-entry-count" class="meet-count"></div>
+      </div>
+      <button id="btn-meet-entry" class="big blue">✏️ エントリー</button>
+      <button id="btn-meet-seed" class="big ghost">🧩 組み分け（自動シード）</button>
+      <button id="btn-meet-program" class="big ghost">📋 プログラム / リザルト</button>
+      <button id="btn-meet-delete" class="text-danger">この記録会を削除</button>
+    </section>
+
+    <!-- 記録会：エントリー -->
+    <section id="screen-entry" class="screen" hidden>
+      <header class="bar"><button class="ghost back" id="entry-back">← 戻る</button><h2>エントリー</h2></header>
+      <div class="seg seg-tabs" id="entry-kind-seg"><button data-ek="indiv" class="on">個人</button><button data-ek="relay">リレー</button></div>
+
+      <div id="entry-indiv">
+        <label class="field"><span>所属</span><select id="ei-school"></select></label>
+        <label class="field"><span>氏名</span><select id="ei-swimmer"><option value="">— 氏名を選択 —</option></select></label>
+        <div id="ei-guest-fields" class="guest-fields" hidden>
+          <div class="frow">
+            <label class="field"><span>ゲスト氏名</span><input id="ei-guest-name" type="text" placeholder="氏名" /></label>
+            <label class="field"><span>学年</span><select id="ei-guest-grade"><option value="1">1年</option><option value="2">2年</option><option value="3">3年</option></select></label>
+            <label class="field"><span>性別</span><select id="ei-guest-gender"><option value="男">男</option><option value="女">女</option></select></label>
+          </div>
+        </div>
+        <div class="frow">
+          <label class="field"><span>種目</span><select id="ei-stroke"></select></label>
+          <label class="field"><span>距離</span><select id="ei-dist"></select></label>
+        </div>
+        <label class="field"><span>エントリータイム</span><input id="ei-seed" inputmode="decimal" placeholder="例 28.55 または 1:05.33" /></label>
+        <button id="btn-add-indiv" class="big blue">＋ このエントリーを追加</button>
+      </div>
+
+      <div id="entry-relay" hidden>
+        <label class="field"><span>学校</span><select id="er-school"></select></label>
+        <div class="frow">
+          <label class="field"><span>種目</span><select id="er-stroke"></select></label>
+          <label class="field"><span>距離</span><select id="er-dist"></select></label>
+        </div>
+        <label class="field"><span>第1泳者</span><select class="er-leg"><option value="">— 選択 —</option></select></label>
+        <label class="field"><span>第2泳者</span><select class="er-leg"><option value="">— 選択 —</option></select></label>
+        <label class="field"><span>第3泳者</span><select class="er-leg"><option value="">— 選択 —</option></select></label>
+        <label class="field"><span>第4泳者</span><select class="er-leg"><option value="">— 選択 —</option></select></label>
+        <label class="field"><span>エントリータイム</span><input id="er-seed" inputmode="decimal" placeholder="例 1:45.20" /></label>
+        <button id="btn-add-relay" class="big blue">＋ このリレーを追加</button>
+      </div>
+
+      <div class="sec-title" id="entry-count2" style="margin-top:18px;">エントリー</div>
+      <div id="entry-list"></div>
     </section>
 
   </main>
