@@ -443,3 +443,24 @@ button { font-family: inherit; }
 .top-meets-title { font-size: 13px; font-weight: 800; color: var(--blue-deep); margin: 4px 2px; }
 .meet-card.top { border-color: var(--orange); }
 .meet-card.top .mc-name { color: var(--orange-deep); }
+
+/* ── トースト ── */
+.toast { position: fixed; left: 50%; bottom: calc(28px + env(safe-area-inset-bottom)); transform: translateX(-50%) translateY(10px);
+  background: var(--blue-deep); color: #fff; padding: 11px 18px; border-radius: 999px; font-weight: 700; font-size: 14px;
+  box-shadow: 0 10px 30px rgba(13,79,158,.35); opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 80; max-width: 90vw; text-align: center; }
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ── プログラム ── */
+.program-list { display: flex; flex-direction: column; gap: 14px; margin-top: 12px; }
+.prace { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); }
+.prace-head { display: flex; align-items: baseline; gap: 10px; background: var(--blue-soft); padding: 8px 12px; }
+.pno { font-weight: 800; color: var(--blue-deep); }
+.pev { font-size: 13px; color: var(--ink); font-weight: 700; }
+.prow { display: grid; grid-template-columns: 28px 1fr auto auto; align-items: center; gap: 8px; padding: 7px 12px; border-top: 1px solid var(--line); }
+.prow.empty { opacity: .45; }
+.plane { width: 24px; height: 24px; border-radius: 6px; background: var(--blue-deep); color: #fff; font-weight: 800; font-size: 13px; display: flex; align-items: center; justify-content: center; }
+.pname { font-size: 14px; font-weight: 700; color: var(--ink); display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
+.pname .psch { font-size: 11px; color: var(--muted); font-weight: 600; }
+.pname .pst { font-size: 11px; color: var(--orange-deep); font-weight: 700; }
+.pseed { font-variant-numeric: tabular-nums; font-size: 13px; color: var(--muted); }
+.presult { font-variant-numeric: tabular-nums; font-weight: 800; color: var(--blue-deep); min-width: 56px; text-align: right; }
