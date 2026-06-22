@@ -375,3 +375,22 @@ button { font-family: inherit; }
 .lt-name { flex: 1; color: var(--ink); }
 .lt-time { font-weight: 800; font-variant-numeric: tabular-nums; color: var(--blue-deep); }
 .r-legs .leg b { color: var(--blue-deep); font-variant-numeric: tabular-nums; }
+
+/* ── 終了後の確認（記録者） ── */
+#rec-review { margin-top: 14px; }
+.review-msg { text-align: center; font-weight: 700; color: var(--green); margin-bottom: 12px; }
+
+/* ── 分析：指標カード ── */
+.metric-card { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin: 6px 0 8px; box-shadow: var(--shadow); }
+.metric-card b { font-variant-numeric: tabular-nums; color: var(--ink); }
+.metric-card .mc-bad { color: var(--red); font-weight: 700; }
+.metric-card .mc-good { color: var(--green); font-weight: 700; }
+
+.ideal { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 6px 0 14px; }
+.ideal > div { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 8px; text-align: center; box-shadow: var(--shadow); }
+.ideal b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; color: var(--blue-deep); }
+.ideal span { font-size: 11px; color: var(--muted); }
+.ideal .gap { background: #fff7f0; border-color: var(--orange); }
+.ideal .gap b { color: var(--orange-deep); }
+#trend-note { margin: -4px 0 14px; }

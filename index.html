@@ -93,6 +93,9 @@
           <button id="btn-end" class="big blue">終了して保存</button>
           <button id="btn-reset" class="big ghost danger">リセット</button>
         </div>
+        <div class="row" hidden id="ended-actions">
+          <button id="btn-next" class="big start">次のレースへ（準備）</button>
+        </div>
       </div>
 
       <div class="big-clock" id="starter-clock" hidden>0.00</div>
@@ -163,6 +166,14 @@
       <button id="btn-split" class="huge split" disabled>ラップ / ゴール</button>
 
       <div class="splits" id="splits"></div>
+
+      <div id="rec-review" hidden>
+        <div class="review-msg">✓ この記録は保存されました</div>
+        <div class="row2">
+          <button id="btn-rec-delete" class="big ghost danger">この記録を削除</button>
+          <button id="btn-rec-back" class="big blue">戻る</button>
+        </div>
+      </div>
     </section>
 
     <!-- メンバー登録 -->
@@ -249,8 +260,10 @@
                 <div class="seg" id="sort-seg"><button data-sort="date" class="on">日付順</button><button data-sort="time">タイム順</button></div>
               </div>
             </div>
+            <div id="ideal-card"></div>
             <div class="sec-title">タイム推移（日付×タイム）</div>
             <div class="chart-wrap"><canvas id="chart-progress"></canvas></div>
+            <p class="hint" id="trend-note"></p>
             <label class="check"><input id="overlay-toggle" type="checkbox" /><span>各レースのラップを重ねて比較</span></label>
             <div class="chart-wrap" id="overlay-wrap" hidden><canvas id="chart-overlay"></canvas></div>
             <div class="sec-title">レース一覧（タップで分析）</div>
@@ -285,7 +298,19 @@
       <div id="analysis" class="analysis" hidden>
         <div class="ana-head"><b id="ana-title"></b><button id="ana-close" class="ghost">閉じる</button></div>
         <div class="chart-wrap"><canvas id="chart-lap"></canvas></div>
+        <div id="ana-balance"></div>
         <div id="ana-legs"></div>
+        <div id="shape-sec" hidden>
+          <div class="sec-title">ペース形状（自分 vs 上位平均）</div>
+          <div class="chart-wrap"><canvas id="chart-shape"></canvas></div>
+          <p class="hint" id="shape-note"></p>
+        </div>
+        <div id="deficit-sec" hidden>
+          <div class="sec-title">区間ごとの差（チーム最速比）</div>
+          <div class="chart-wrap"><canvas id="chart-deficit"></canvas></div>
+          <p class="hint" id="deficit-note"></p>
+        </div>
+        <div class="sec-title">通過タイム</div>
         <div class="splits" id="ana-splits"></div>
       </div>
     </section>
