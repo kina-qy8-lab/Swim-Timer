@@ -367,3 +367,11 @@ button { font-family: inherit; }
 .tag.retired-tag { background: #e9eef4; color: #5d7795; }
 .m-actions .retire { color: var(--blue-deep); }
 .member-row.retired .m-actions .retire { color: var(--green); }
+
+/* ── リレー：選手ごとのタイム ── */
+.leg-times { display: grid; gap: 8px; margin-bottom: 6px; }
+.lt-row { display: flex; align-items: center; gap: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; box-shadow: var(--shadow); }
+.lt-pos { width: 44px; flex: none; color: var(--muted); font-size: 13px; }
+.lt-name { flex: 1; color: var(--ink); }
+.lt-time { font-weight: 800; font-variant-numeric: tabular-nums; color: var(--blue-deep); }
+.r-legs .leg b { color: var(--blue-deep); font-variant-numeric: tabular-nums; }

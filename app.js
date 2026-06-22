@@ -471,6 +471,19 @@ function recDists(r) {
   return Array.from({ length: n }, (_, i) => i + 1);
 }
 function lapsOf(r) { const s = r.splits || []; return s.map((c, i) => c - (i ? s[i - 1] : 0)); }
+// リレー：各泳者（区間）の合計タイム。距離の境界で累計を区切って差を取る。
+function relayLegTimes(r) {
+  if (!r.isRelay || !r.distance || !(r.legs || []).length) return null;
+  const dists = recDists(r), splits = r.splits || [], legCount = r.legs.length, legDist = r.distance / legCount;
+  const bounds = [];
+  for (let k = 1; k <= legCount; k++) {
+    const target = legDist * k;
+    let idx = dists.findIndex((d) => Math.abs(d - target) < 0.5);
+    if (idx === -1 && splits.length === legCount) idx = k - 1; // 各泳者1区切りで入力された場合
+    bounds.push(idx >= 0 ? splits[idx] : null);
+  }
+  return bounds.map((c, k) => { const prev = k === 0 ? 0 : bounds[k - 1]; return (c != null && prev != null) ? c - prev : null; });
+}
 function relayGender(r) {
   const gs = (r.legs || []).map((l) => members[l.memberId]?.gender).filter(Boolean);
   if (!gs.length) return "混合";
@@ -602,7 +615,8 @@ function recordCardHtml(r) {
   if (editingRecordId === r.id) return recordEditorHtml(r);
   const laps = lapsOf(r).map((l) => `<span class="chip">${fmt(l)}</span>`).join("");
   const who = r.isRelay ? "🏊 リレー" : escapeHtml(r.name || "");
-  const relayLegs = r.isRelay ? `<div class="r-legs">${(r.legs || []).map((l, i) => `<span class="leg">${i + 1}. ${escapeHtml(l.name)}${l.legStroke ? `（${escapeHtml(l.legStroke)}）` : ""}</span>`).join("")}</div>` : "";
+  const lt = r.isRelay ? relayLegTimes(r) : null;
+  const relayLegs = r.isRelay ? `<div class="r-legs">${(r.legs || []).map((l, i) => `<span class="leg">${i + 1}. ${escapeHtml(l.name)}${l.legStroke ? `（${escapeHtml(l.legStroke)}）` : ""}${lt && lt[i] != null ? ` <b>${fmt(lt[i])}</b>` : ""}</span>`).join("")}</div>` : "";
   return `<div class="record-row" data-rec="${r.id}">
     <div class="r-tap" data-open="${r.id}">
       <div class="r-head"><span class="r-final">${fmt(r.finalMs)}</span><span class="r-name">${who}</span><span class="r-meta">${escapeHtml(evLabel(r))}</span></div>
@@ -652,6 +666,11 @@ function renderAnalysis() {
     return `<div class="split-row"><span class="idx">${dists[i] ?? i + 1}${r.distance ? "m" : ""}</span><span class="cum">${fmt(c)}</span><span class="lap">${fmt(laps[i])} ${ds}</span></div>`;
   }).join("");
   $("#ana-splits").innerHTML = `<div class="cap"><span>距離</span><span>累計</span><span>ラップ（前との差）</span></div>` + rows;
+  if (r.isRelay) {
+    const lt = relayLegTimes(r);
+    $("#ana-legs").innerHTML = `<div class="sec-title">選手ごとのタイム</div><div class="leg-times">` +
+      (r.legs || []).map((l, i) => `<div class="lt-row"><span class="lt-pos">${i + 1}泳</span><span class="lt-name">${escapeHtml(l.name)}${l.legStroke ? `・${escapeHtml(l.legStroke)}` : ""}</span><span class="lt-time">${lt && lt[i] != null ? fmt(lt[i]) : "—"}</span></div>`).join("") + `</div>`;
+  } else $("#ana-legs").innerHTML = "";
   drawLap(r);
   $("#analysis").scrollIntoView({ behavior: "smooth", block: "start" });
 }
