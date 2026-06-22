@@ -394,3 +394,13 @@ button { font-family: inherit; }
 .ideal .gap { background: #fff7f0; border-color: var(--orange); }
 .ideal .gap b { color: var(--orange-deep); }
 #trend-note { margin: -4px 0 14px; }
+
+/* ── 未保存モーダル ── */
+.modal { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center;
+  background: rgba(13,40,80,.45); padding: 24px; }
+.modal-box { background: var(--surface); border-radius: 16px; padding: 20px; max-width: 420px; width: 100%;
+  box-shadow: 0 18px 50px rgba(13,79,158,.25); }
+.modal-title { font-weight: 800; font-size: 18px; color: var(--blue-deep); margin-bottom: 8px; }
+.modal-text { color: var(--ink); margin: 0 0 16px; }
+.modal .row2 { display: flex; gap: 10px; }
+.modal .row2 .big { flex: 1; }

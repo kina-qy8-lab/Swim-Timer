@@ -63,6 +63,7 @@ let chProgress = null, chOverlay = null, chLap = null, chShape = null, chDeficit
 let viewPassHash = null;
 let ending = false;
 let joinedRaceId = null;
+let recFinished = false, finishedResult = null, finishedSaved = false;
 
 const serverNow = () => Date.now() + serverOffset;
 const todayISO = () => {
@@ -214,7 +215,7 @@ let pool = 25, lapMode = "both", mode = "practice";
 
 // 非計測時は常に ready（準備）状態。スターター画面に入ったら ready を保証。
 function ensureReady() {
-  if (race && (race.state === "running" || race.state === "ended")) return;
+  if (race && race.state === "running") return;
   if (race && race.state === "ready") {
     pool = race.poolLength || pool; lapMode = race.lapMode || lapMode; mode = race.mode || mode;
     return;
@@ -268,32 +269,12 @@ function buildResult(laneNum, lane) {
   if (lane.isRelay) return { ...base, isRelay: true, name: lane.name || "リレー", school: lane.school || "", legs: lane.legs || [] };
   return { ...base, memberId: lane.memberId || null, name: lane.name, school: lane.school || "" };
 }
-// 終了：割り当て済み全レーンを自動保存し、各レーンに resultId を記録。結果を残したまま ended で停止。
+// 終了：レースを片付けて準備状態へ（保存は各記録者が手動で行う）
 function endRace() {
   if (!race || ending) return;
   ending = true;
-  const updates = { state: "ended" };
-  Object.entries(race.lanes || {}).forEach(([L, lane]) => {
-    if (lane?.name && splitsArrOf(lane).length) {
-      const nref = push(ref(db, RESULTS));
-      set(nref, buildResult(Number(L), lane));
-      updates[`lanes/${L}/resultId`] = nref.key;
-      updates[`lanes/${L}/saved`] = true;
-    }
-  });
-  update(ref(db, RACE), updates);
-  setTimeout(() => { ending = false; }, 1500);
-}
-// 次のレースへ（結果を片付けて準備状態へ）
-function nextRace() { if (race) set(ref(db, RACE), freshReady()); }
-// 記録者が、確認画面で自分のレーンの記録を削除（自動保存はこの後も継続）
-function deleteMyResult() {
-  const lane = race?.lanes?.[myLane];
-  const rid = lane?.resultId;
-  if (!rid) { alert("削除できる記録が見つかりません。"); return; }
-  if (!confirm("この記録を削除しますか？\n（残したくない場合に使います。次回以降の自動保存は続きます）")) return;
-  remove(ref(db, `${RESULTS}/${rid}`));
-  update(ref(db, `${RACE}/lanes/${myLane}`), { resultId: null, deleted: true });
+  set(ref(db, RACE), freshReady());
+  setTimeout(() => { ending = false; }, 1200);
 }
 
 // ── 記録者操作 ─────────────────────────────────────────
@@ -311,49 +292,89 @@ function recordSplit() {
   set(push(child(ref(db, RACE), `lanes/${myLane}/splits`)), { elapsedMs: Math.round(elapsed), at: serverTimestamp() });
   if (plan && n + 1 >= plan.count) update(ref(db, `${RACE}/lanes/${myLane}`), { done: true });
 }
-function saveResult() { /* 手動保存は廃止：終了時に自動保存される */ }
+function saveResult() { /* 廃止 */ }
+
+// ── ゴール後の完了表示（手動保存） ──
+function captureFinish() {
+  if (recFinished) return;
+  const lane = race?.lanes?.[myLane];
+  if (!lane) return;
+  finishedResult = buildResult(myLane, lane);   // この時点でスナップショット（以後セッションが変わっても保持）
+  finishedSaved = false;
+  recFinished = true;
+  renderFinished();
+}
+function renderFinished() {
+  const r = finishedResult; if (!r) return;
+  $("#rec-status").textContent = "計測完了";
+  $("#rec-status").classList.remove("live");
+  $("#rec-swimmer").textContent = r.isRelay ? "🏊 リレー" : (r.name || "—");
+  $("#rec-event").textContent = r.stroke ? `${r.stroke} ${r.distance}m` : "自由計測";
+  $("#rec-clock").textContent = fmt(r.finalMs);
+  $("#btn-split").hidden = true;
+  // 通過タイム表
+  const dists = recDists(r), s = r.splits || [];
+  let html = `<div class="cap"><span>距離</span><span>累計</span><span>ラップ</span></div>`;
+  s.forEach((c, i) => {
+    const lap = c - (i ? s[i - 1] : 0);
+    const isGoal = i === s.length - 1;
+    html += `<div class="split-row${isGoal ? " final" : ""}"><span class="idx">${dists[i] ?? i + 1}m</span><span class="cum">${fmt(c)}</span><span class="lap">${fmt(lap)}</span></div>`;
+  });
+  $("#splits").innerHTML = html;
+  $("#rec-review").hidden = false;
+  $("#screen-recorder .back").hidden = true;
+  $("#btn-rec-save").disabled = finishedSaved;
+  $("#rec-review .review-msg").textContent = finishedSaved ? "✓ 保存しました" : "ゴール！　保存するか、次の記録へ進んでください";
+}
+function saveFinished() {
+  if (!finishedResult || finishedSaved) return;
+  set(push(ref(db, RESULTS)), finishedResult);
+  finishedSaved = true;
+  $("#btn-rec-save").disabled = true;
+  $("#rec-review .review-msg").textContent = "✓ 保存しました";
+}
+function nextRecord() {
+  if (!finishedSaved) { $("#unsaved-modal").hidden = false; return; }
+  leaveFinished();
+}
+function leaveFinished() {
+  recFinished = false; finishedResult = null; finishedSaved = false;
+  $("#unsaved-modal").hidden = true;
+  $("#rec-review").hidden = true;
+  $("#btn-split").hidden = false;
+  resetRecorderSetup();
+  show("screen-recorder-setup");
+}
 
 // ── 画面更新（レース） ─────────────────────────────────
 function onRaceChanged() {
   if (role === "starter") {
-    const st = race?.state || "ready";
-    const running = st === "running", ended = st === "ended";
-    $("#starter-state").textContent = running ? "計測中" : ended ? "計測終了（保存済み）" : "準備OK（記録者を待機）";
-    $("#starter-config").hidden = running || ended;
-    $("#btn-start").hidden = running || ended;
+    const running = race?.state === "running";
+    $("#starter-state").textContent = running ? "計測中" : "準備OK（記録者を待機）";
+    $("#starter-config").hidden = running;
+    $("#btn-start").hidden = running;
     $("#running-actions").hidden = !running;
-    $("#ended-actions").hidden = !ended;
     $("#starter-clock").hidden = !running;
-    $("#starter-hint").hidden = running || ended;
+    $("#starter-hint").hidden = running;
     renderStarterLanes();
-    if (running) {
-      const assigned = Object.values(race.lanes || {}).filter((l) => l?.name);
-      if (assigned.length > 0 && assigned.every((l) => l.done === true)) endRace();
-    }
   }
 
   if (role === "recorder" && !$("#screen-recorder").hidden) {
+    if (recFinished) { return; }            // 完了表示中はレースの変化で画面遷移しない
     if (!race || race.raceId !== joinedRaceId) {
       resetRecorderSetup(); show("screen-recorder-setup"); return;
     }
-    const running = race.state === "running", ended = race.state === "ended";
+    const running = race.state === "running";
     const statusEl = $("#rec-status");
-    statusEl.textContent = running ? "計測中" : ended ? "計測終了・保存しました" : "まもなくスタート（合図を待つ）";
+    statusEl.textContent = running ? "計測中" : "まもなくスタート（合図を待つ）";
     statusEl.classList.toggle("live", running);
     const lane = race.lanes?.[myLane];
     $("#rec-swimmer").textContent = lane?.name || "—";
     $("#rec-event").textContent = lane?.stroke ? `${lane.stroke} ${lane.distance}m` : "自由計測";
     renderSplits();
     updateSplitButton();
-    $("#btn-split").hidden = ended;
-    $("#rec-review").hidden = !ended;
-    if (ended) {
-      const arr = laneSplitsArr(myLane);
-      $("#rec-clock").textContent = arr.length ? fmt(arr[arr.length - 1].elapsedMs) : "0.00";
-      const msg = lane?.deleted ? "🗑 この記録は削除しました" : (lane?.resultId ? "✓ この記録は保存されました" : "（保存対象の記録がありません）");
-      $("#rec-review .review-msg").textContent = msg;
-      $("#btn-rec-delete").disabled = !lane?.resultId;
-    }
+    const plan = currentPlan();
+    if (running && plan && laneSplitsArr(myLane).length >= plan.count) captureFinish();
   }
 
   if (role === "recorder" && ringHere && race?.state === "running"
@@ -1002,7 +1023,7 @@ function onLaneChosen(lane) {
   const a = race?.lanes?.[lane] || null;
   $("#assign-area").hidden = false;
   $("#setup-hint").hidden = memberList().length !== 0;
-  $("#ev-stroke").value = a?.stroke || "";
+  $("#ev-stroke").value = a?.stroke || "自由形";
   populateDistances(a?.distance);
   applyStrokeMode(a);
 }
@@ -1034,6 +1055,10 @@ function joinLane() {
   $("#rec-lane-label").textContent = `レーン ${myLane}`;
   lastBeepRaceId = null;
   joinedRaceId = race.raceId;
+  recFinished = false; finishedResult = null; finishedSaved = false;
+  $("#rec-review").hidden = true;
+  $("#btn-split").hidden = false;
+  $("#screen-recorder .back").hidden = false;
   show("screen-recorder");
   onRaceChanged();
 }
@@ -1041,11 +1066,13 @@ function joinLane() {
 // ── 描画ループ ─────────────────────────────────────────
 function tick() {
   $("#sync-clock").textContent = fmtClock(serverNow());
-  if (race?.state === "running" && race.startServerTime != null) {
+  if (recFinished) {
+    // 完了表示：確定タイムのまま凍結
+  } else if (race?.state === "running" && race.startServerTime != null) {
     const t = fmt(serverNow() - race.startServerTime);
     if (role === "starter") $("#starter-clock").textContent = t;
     if (role === "recorder") $("#rec-clock").textContent = t;
-  } else if (role === "recorder" && race?.state !== "ended") {
+  } else if (role === "recorder") {
     $("#rec-clock").textContent = "0.00";
   }
   requestAnimationFrame(tick);
@@ -1102,9 +1129,10 @@ volEl.addEventListener("input", (e) => { beepVol = clampVol(Number(e.target.valu
 $("#btn-start").addEventListener("click", start);
 $("#btn-end").addEventListener("click", endRace);
 $("#btn-reset").addEventListener("click", resetRace);
-$("#btn-next").addEventListener("click", nextRace);
-$("#btn-rec-delete").addEventListener("click", deleteMyResult);
-$("#btn-rec-back").addEventListener("click", () => { resetRecorderSetup(); show("screen-recorder-setup"); });
+$("#btn-rec-save").addEventListener("click", saveFinished);
+$("#btn-rec-next").addEventListener("click", nextRecord);
+$("#modal-cancel").addEventListener("click", () => { $("#unsaved-modal").hidden = true; });
+$("#modal-proceed").addEventListener("click", leaveFinished);
 $("#mode-seg").addEventListener("click", (e) => {
   const b = e.target.closest("button"); if (!b) return;
   mode = b.dataset.mode;

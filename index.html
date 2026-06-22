@@ -90,11 +90,8 @@
       <div class="starter-actions">
         <button id="btn-start" class="big start">スタート</button>
         <div class="row" hidden id="running-actions">
-          <button id="btn-end" class="big blue">終了して保存</button>
+          <button id="btn-end" class="big blue">レースを終了</button>
           <button id="btn-reset" class="big ghost danger">リセット</button>
-        </div>
-        <div class="row" hidden id="ended-actions">
-          <button id="btn-next" class="big start">次のレースへ（準備）</button>
         </div>
       </div>
 
@@ -119,7 +116,6 @@
         <div class="frow">
           <label class="field"><span>種目</span>
             <select id="ev-stroke">
-              <option value="">（自由計測）</option>
               <option value="自由形">自由形</option>
               <option value="平泳ぎ">平泳ぎ</option>
               <option value="背泳ぎ">背泳ぎ</option>
@@ -168,10 +164,10 @@
       <div class="splits" id="splits"></div>
 
       <div id="rec-review" hidden>
-        <div class="review-msg">✓ この記録は保存されました</div>
+        <div class="review-msg">ゴール！　保存するか、次の記録へ進んでください</div>
         <div class="row2">
-          <button id="btn-rec-delete" class="big ghost danger">この記録を削除</button>
-          <button id="btn-rec-back" class="big blue">戻る</button>
+          <button id="btn-rec-save" class="big blue">保存する</button>
+          <button id="btn-rec-next" class="big ghost">次の記録に移る</button>
         </div>
       </div>
     </section>
@@ -366,6 +362,17 @@
     </section>
 
   </main>
+
+  <div id="unsaved-modal" class="modal" hidden>
+    <div class="modal-box">
+      <div class="modal-title">記録が保存されていません</div>
+      <p class="modal-text">この記録はまだ保存されていません。保存せずに次の記録へ進みますか？</p>
+      <div class="row2">
+        <button id="modal-cancel" class="big ghost">キャンセル</button>
+        <button id="modal-proceed" class="big blue">次の記録へ</button>
+      </div>
+    </div>
+  </div>
 
   <footer id="diag">
     <span class="dot" id="conn-dot"></span>
