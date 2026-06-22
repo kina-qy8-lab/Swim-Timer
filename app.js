@@ -45,6 +45,7 @@ let savedSig = null;
 let editingMemberId = null;
 let editingRecordId = null;
 let memberSort = "grade";
+let showRetired = false;
 let recFilter = "";
 // 記録ページの状態
 let recMode = "indiv";        // indiv | relay | ranking
@@ -429,20 +430,26 @@ function exitEditMember() {
   $("#btn-cancel-edit").hidden = true;
 }
 function deleteMember(id) {
-  if (!confirm("このメンバーを削除しますか？")) return;
+  if (!confirm("このメンバーを削除しますか？\n（これまでの記録は残ります）")) return;
   remove(ref(db, `${MEMBERS}/${id}`));
   if (editingMemberId === id) exitEditMember();
 }
+function toggleRetire(id) {
+  const m = members[id]; if (!m) return;
+  update(ref(db, `${MEMBERS}/${id}`), { retired: !m.retired });
+}
 function renderMembers() {
   const wrap = $("#mlist");
-  const list = memberList();
-  if (!list.length) { wrap.innerHTML = `<p class="empty">まだ登録がありません。</p>`; return; }
+  let list = memberList();
+  if (!showRetired) list = list.filter((m) => !m.retired);
+  if (!list.length) { wrap.innerHTML = `<p class="empty">${showRetired ? "まだ登録がありません。" : "表示できるメンバーがいません（引退者のみ）。"}</p>`; return; }
   wrap.innerHTML = list.map((m) => `
-    <div class="member-row${editingMemberId === m.id ? " editing" : ""}">
-      <div class="m-main"><span class="m-name">${escapeHtml(m.name)}</span>${m.guest ? `<span class="tag guest">ゲスト</span>` : ""}</div>
+    <div class="member-row${editingMemberId === m.id ? " editing" : ""}${m.retired ? " retired" : ""}">
+      <div class="m-main"><span class="m-name">${escapeHtml(m.name)}</span>${m.guest ? `<span class="tag guest">ゲスト</span>` : ""}${m.retired ? `<span class="tag retired-tag">引退</span>` : ""}</div>
       <div class="m-sub">${m.grade}年・${escapeHtml(m.gender || "")}・${escapeHtml(m.school || "")}</div>
       <div class="m-actions">
         <button class="edit" data-edit="${m.id}">編集</button>
+        <button class="retire" data-retire="${m.id}">${m.retired ? "復帰" : "引退"}</button>
         <button class="del" data-del="${m.id}">削除</button>
       </div>
     </div>`).join("");
@@ -481,7 +488,7 @@ function swimmerRecs(id) { return allRecs().filter((r) => !r.isRelay && r.member
 function populateFilter() {
   const sel = $("#rec-filter"); if (!sel) return;
   const cur = sel.value;
-  sel.innerHTML = `<option value="">— 選手を選択 —</option>` + memberList().map((m) => `<option value="${m.id}">${escapeHtml(m.name)}（${m.grade}年）</option>`).join("");
+  sel.innerHTML = `<option value="">— 選手を選択 —</option>` + memberList().map((m) => `<option value="${m.id}">${escapeHtml(m.name)}（${m.grade}年${m.retired ? "・引退" : ""}）</option>`).join("");
   sel.value = cur || recFilter || "";
 }
 function renderRecordsAll() {
@@ -794,8 +801,8 @@ function resetRecorderSetup() {
   $("#btn-join").disabled = true;
 }
 function memberOptions(selId) {
-  return memberList().map((m) =>
-    `<option value="${m.id}"${m.id === selId ? " selected" : ""}>${escapeHtml(m.name)}（${m.grade}年${m.guest ? "・ゲスト" : ""}）</option>`).join("");
+  return memberList().filter((m) => !m.retired || m.id === selId).map((m) =>
+    `<option value="${m.id}"${m.id === selId ? " selected" : ""}>${escapeHtml(m.name)}（${m.grade}年${m.guest ? "・ゲスト" : ""}${m.retired ? "・引退" : ""}）</option>`).join("");
 }
 function populatePicker(selId) {
   const sel = $("#swimmer-pick"); if (!sel) return;
@@ -973,8 +980,10 @@ $("#msort").addEventListener("click", (e) => {
 });
 $("#mlist").addEventListener("click", (e) => {
   const ed = e.target.closest("[data-edit]"); if (ed) return startEditMember(ed.dataset.edit);
+  const rt = e.target.closest("[data-retire]"); if (rt) return toggleRetire(rt.dataset.retire);
   const de = e.target.closest("[data-del]"); if (de) return deleteMember(de.dataset.del);
 });
+$("#show-retired").addEventListener("change", (e) => { showRetired = e.target.checked; renderMembers(); });
 
 // 記録
 $("#rec-mode").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; recMode = b.dataset.rmode; analysisId = null; $("#analysis").hidden = true; renderRecordsAll(); });
