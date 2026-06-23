@@ -497,3 +497,42 @@ button { font-family: inherit; }
 /* ── ホーム：記録会エントリー・結果ボタン ── */
 .meetpub-btn { margin: 8px 0 16px; }
 .meet-card.done { opacity: .85; border-style: dashed; }
+
+/* ── 練習計測 ───────────────────────────────────────── */
+.ps-order { display: grid; gap: 8px; margin: 4px 0 16px; }
+.ps-row { display: grid; grid-template-columns: 28px 1fr auto auto auto auto; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; }
+.ps-no { width: 24px; height: 24px; border-radius: 50%; background: var(--blue); color: #fff; font-weight: 700; font-size: 13px; display: grid; place-items: center; }
+.ps-nm { font-weight: 700; color: var(--ink); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ps-off { color: var(--muted); font-size: 13px; white-space: nowrap; }
+.ps-mini { border: 1px solid var(--line); background: var(--surface); color: var(--blue-deep); border-radius: 8px; min-width: 36px; height: 34px; font-size: 16px; cursor: pointer; }
+.ps-mini[disabled] { opacity: .35; cursor: default; }
+.ps-mini.rm { color: var(--red); }
+.pr-menu { font-size: 15px; font-weight: 700; }
+.pr-start-row { margin: 6px 0 14px; }
+.pr-cards { display: grid; gap: 10px; margin: 6px 0 14px; }
+.pr-card { background: var(--surface); border: 2px solid var(--line); border-radius: 14px; padding: 12px 14px; cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent; box-shadow: var(--shadow); transition: transform .05s; }
+.pr-card:active { transform: scale(.99); border-color: var(--blue); }
+.pr-card.done { opacity: .5; cursor: default; }
+.pr-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.pr-name { font-size: 18px; font-weight: 800; color: var(--ink); }
+.pr-rem { font-size: 14px; font-weight: 700; color: var(--orange-deep); white-space: nowrap; }
+.pr-live { font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--blue-deep); margin: 2px 0; }
+.pr-sub { font-size: 13px; color: var(--muted); }
+.pr-sub b { font-variant-numeric: tabular-nums; }
+.pr-ok { color: var(--green); font-weight: 700; }
+.pr-late { color: var(--red); font-weight: 700; }
+.pr-up { color: var(--red); }
+.pr-down { color: var(--blue); }
+.prv-menu { font-weight: 700; color: var(--blue-deep); margin: 4px 0 12px; }
+.prv-sw { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; margin-bottom: 12px; box-shadow: var(--shadow); }
+.prv-h { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+.prv-h b { font-size: 16px; color: var(--ink); }
+.prv-h span { font-size: 13px; color: var(--muted); }
+.prv-cap, .prv-row { display: grid; grid-template-columns: 36px 1fr 1fr 1.2fr; gap: 6px; align-items: center; }
+.prv-cap { color: var(--muted); font-size: 12px; padding: 0 4px 4px; }
+.prv-row { padding: 6px 4px; border-top: 1px solid var(--blue-soft); font-variant-numeric: tabular-nums; }
+.prv-row .i { color: var(--muted); }
+.prv-row .tm { font-size: 18px; font-weight: 800; color: var(--ink); }
+.prv-row .dr { font-weight: 700; color: var(--muted); }
+.prv-row .ci { font-size: 12px; color: var(--green); }
+.prv-row.late .ci { color: var(--red); }

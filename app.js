@@ -1226,6 +1226,7 @@ function joinLane() {
 // ── 描画ループ ─────────────────────────────────────────
 function tick() {
   $("#sync-clock").textContent = fmtClock(serverNow());
+  tickPractice();
   if (recFinished) {
     // 完了表示：確定タイムのまま凍結
   } else if (race?.state === "running" && race.startServerTime != null) {
@@ -1238,6 +1239,237 @@ function tick() {
   requestAnimationFrame(tick);
 }
 requestAnimationFrame(tick);
+
+// ══ 練習計測（1端末1レーン・独立スタート） ══════════════
+const TRAINING = "trainingResults";
+let trSetup = null;   // 設定中の状態
+let tr = null;        // ライブ計測の状態
+let trReview = null;  // 確認画面用に確定した配列
+
+// メニュー設定から「1本あたりのラップ（押下）回数」を出す（既存の lapPlan を流用）
+function trLapsPerRep(menu) {
+  const p = lapPlan(menu.poolLength || 25, menu.distance, menu.lapMode || "none");
+  return p ? p.count : 1;
+}
+function fmtCircle(ms) { return fmt(ms).replace(/\.00$/, ""); }
+function fmtCd(ms) { if (ms == null) return "—"; return (Math.max(0, ms) / 1000).toFixed(1); }
+function fmtDrop(ms) { if (ms == null) return "—"; const s = ms > 0 ? "+" : (ms < 0 ? "−" : "±"); return s + fmt(Math.abs(ms)); }
+function trMenuLabel(menu) {
+  const lap = menu.lapMode && menu.lapMode !== "none" ? "・ラップ" : "";
+  return `${menu.distance}m×${menu.reps}　サークル${fmtCircle(menu.circleMs)}${lap}`;
+}
+
+// サークル計算の核：S = max(基準スタート, 直前ゴール)。完了済みの本だけ返す。
+function trComputeReps(sw, menu) {
+  const lpr = trLapsPerRep(menu), C = menu.circleMs, off = sw.offsetMs || 0;
+  const presses = sw.presses || [];
+  const out = [];
+  let prevFinish = null, prevTime = null;
+  const fullReps = Math.floor(presses.length / lpr);
+  for (let n = 1; n <= fullReps; n++) {
+    const startIdx = (n - 1) * lpr;
+    const F = presses[n * lpr - 1];
+    const E = off + (n - 1) * C;
+    const S = (n === 1) ? off : Math.max(E, prevFinish);
+    const timeMs = F - S;
+    const nextDep = off + n * C;
+    const madeCircle = F <= nextDep;
+    const restMs = nextDep - F;
+    const dropMs = (n > 1) ? timeMs - prevTime : null;
+    const laps = [];
+    for (let j = 0; j < lpr; j++) laps.push(presses[startIdx + j] - S);
+    out.push({ repNo: n, startMs: S, finishMs: F, timeMs, madeCircle, restMs, dropMs, laps });
+    prevFinish = F; prevTime = timeMs;
+  }
+  return out;
+}
+// 進行中の本のライブ状態
+function trLiveState(sw, menu, t) {
+  const lpr = trLapsPerRep(menu), C = menu.circleMs, off = sw.offsetMs || 0;
+  const presses = sw.presses || [];
+  const done = presses.length;
+  const fullReps = Math.floor(done / lpr);
+  const total = menu.reps;
+  if (fullReps >= total) return { done: true };
+  const currentRep = fullReps + 1;
+  const lapInRep = done % lpr;
+  let S;
+  if (currentRep === 1) S = off;
+  else { const prevF = presses[(currentRep - 1) * lpr - 1]; S = Math.max(off + (currentRep - 1) * C, prevF); }
+  const phase = (t < S) ? "wait" : "swim";
+  return { done: false, currentRep, lapInRep, lpr, S, phase, value: phase === "wait" ? S - t : t - S };
+}
+
+// ── 設定画面 ──
+function enterPracticeSetup() {
+  role = null; myLane = null; timingMeetId = null;
+  trSetup = { order: [], poolLength: 25, lapMode: "none" };
+  if (!$("#ps-distance").value) $("#ps-distance").value = 100;
+  if (!$("#ps-reps").value) $("#ps-reps").value = 10;
+  if (!$("#ps-circle").value) $("#ps-circle").value = "1:30";
+  if (!$("#ps-gap").value) $("#ps-gap").value = 5;
+  $("#ps-lane").value = "";
+  renderPracticeSetup();
+  show("screen-practice-setup");
+}
+function trAddSwimmer(id) {
+  if (!trSetup || trSetup.order.includes(id)) return;
+  if (trSetup.order.length >= 5) { alert("レーン内の選手は最大5名です。"); return; }
+  trSetup.order.push(id); renderPracticeSetup();
+}
+function trRemoveSwimmer(i) { if (!trSetup) return; trSetup.order.splice(i, 1); renderPracticeSetup(); }
+function trMoveSwimmer(i, d) { if (!trSetup) return; const o = trSetup.order, j = i + d; if (j < 0 || j >= o.length) return; [o[i], o[j]] = [o[j], o[i]]; renderPracticeSetup(); }
+function renderPracticeSetup() {
+  if (!trSetup) return;
+  $$("#ps-pool button").forEach((x) => x.classList.toggle("on", Number(x.dataset.pool) === trSetup.poolLength));
+  $$("#ps-lap button").forEach((x) => x.classList.toggle("on", x.dataset.lap === trSetup.lapMode));
+  if (!$("#ps-lane").dataset.filled) { $("#ps-lane").innerHTML = `<option value="">レーン指定なし</option>` + [1, 2, 3, 4, 5, 6].map((n) => `<option value="${n}">${n}レーン</option>`).join(""); $("#ps-lane").dataset.filled = "1"; }
+  const chosen = new Set(trSetup.order);
+  const opts = memberList().filter((m) => !m.retired && (m.school || OWN_SCHOOL) === OWN_SCHOOL && !chosen.has(m.id));
+  $("#ps-add").innerHTML = `<option value="">＋ 選手を追加</option>` + opts.map((m) => `<option value="${m.id}">${escapeHtml(m.name)}（${m.grade || ""}年）</option>`).join("");
+  const gap = Number($("#ps-gap").value || 0);
+  $("#ps-order").innerHTML = trSetup.order.length ? trSetup.order.map((id, i) => {
+    const m = members[id] || {};
+    return `<div class="ps-row"><span class="ps-no">${i + 1}</span><span class="ps-nm">${escapeHtml(m.name || "—")}</span><span class="ps-off">${i === 0 ? "基準" : "+" + (i * gap) + "秒"}</span>` +
+      `<button class="ps-mini" data-ps-up="${i}" ${i === 0 ? "disabled" : ""}>↑</button>` +
+      `<button class="ps-mini" data-ps-dn="${i}" ${i === trSetup.order.length - 1 ? "disabled" : ""}>↓</button>` +
+      `<button class="ps-mini rm" data-ps-rm="${i}">✕</button></div>`;
+  }).join("") : `<p class="hint">出発順に選手を追加してください（最大5名）。</p>`;
+  $("#btn-ps-begin").disabled = trSetup.order.length < 1;
+}
+function trBegin() {
+  if (!trSetup || !trSetup.order.length) return;
+  const distance = Number($("#ps-distance").value);
+  const reps = Number($("#ps-reps").value);
+  const circleMs = parseTime($("#ps-circle").value);
+  const gapSec = Number($("#ps-gap").value || 0);
+  if (!distance || !reps || !circleMs) { alert("距離・本数・サークルを正しく入力してください。"); return; }
+  const lane = $("#ps-lane").value ? Number($("#ps-lane").value) : null;
+  const menu = { poolLength: trSetup.poolLength, distance, reps, circleMs, lapMode: trSetup.lapMode, startGapMs: Math.round(gapSec * 1000) };
+  const swimmers = trSetup.order.map((id, i) => {
+    const m = members[id] || {};
+    return { memberId: id, name: m.name || "—", school: m.school || OWN_SCHOOL, offsetMs: i * menu.startGapMs, presses: [] };
+  });
+  tr = { state: "ready", t0: null, menu, swimmers, log: [], lane, dateISO: todayISO() };
+  renderPracticeRun();
+  show("screen-practice-run");
+}
+
+// ── 計測画面 ──
+function trStart() {
+  if (!tr || tr.state === "running") return;
+  ensureAudio();
+  const t0Local = Date.now() + START_LEAD_MS;
+  scheduleBeepAt(t0Local);
+  tr.t0 = t0Local + serverOffset;
+  tr.state = "running";
+  renderPracticeRun();
+}
+function trPress(si) {
+  if (!tr || tr.state !== "running") return;
+  const sw = tr.swimmers[si]; if (!sw) return;
+  const lpr = trLapsPerRep(tr.menu);
+  sw.presses = sw.presses || [];
+  if (sw.presses.length >= tr.menu.reps * lpr) return;
+  const t = serverNow() - tr.t0;
+  if (t < 0) return;
+  sw.presses.push(Math.round(t));
+  tr.log.push(si);
+  renderPracticeRun();
+}
+function trUndo() {
+  if (!tr || !tr.log || !tr.log.length) return;
+  const si = tr.log.pop();
+  const sw = tr.swimmers[si];
+  if (sw && sw.presses && sw.presses.length) sw.presses.pop();
+  renderPracticeRun();
+}
+function renderPracticeRun() {
+  if (!tr) return;
+  $("#pr-menu").textContent = trMenuLabel(tr.menu) + (tr.lane ? `　${tr.lane}レーン` : "");
+  const ready = tr.state === "ready";
+  $("#pr-start-row").hidden = !ready;
+  $("#pr-ctrl-row").hidden = ready;
+  if (ready) $("#pr-clock").textContent = "0.00";
+  const lpr = trLapsPerRep(tr.menu);
+  $("#pr-cards").innerHTML = tr.swimmers.map((sw, si) => {
+    const reps = trComputeReps(sw, tr.menu);
+    const last = reps[reps.length - 1];
+    const pressDone = (sw.presses || []).length;
+    const done = pressDone >= tr.menu.reps * lpr;
+    const remaining = tr.menu.reps - Math.floor(pressDone / lpr);
+    let sub;
+    if (last) {
+      const cl = last.madeCircle ? `<span class="pr-ok">サークル内 余裕${fmtCd(last.restMs)}s</span>` : `<span class="pr-late">サークル遅れ</span>`;
+      sub = `前本 <b>${fmt(last.timeMs)}</b>　落ち幅 <b class="${(last.dropMs || 0) > 0 ? "pr-up" : "pr-down"}">${fmtDrop(last.dropMs)}</b>　${cl}`;
+    } else sub = "スタート前";
+    return `<div class="pr-card${done ? " done" : ""}" data-pr-si="${si}">
+      <div class="pr-top"><span class="pr-name">${escapeHtml(sw.name)}</span><span class="pr-rem">${done ? "完了" : "残り " + remaining + "本"}</span></div>
+      <div class="pr-live" id="pr-live-${si}">—</div>
+      <div class="pr-sub">${sub}</div>
+    </div>`;
+  }).join("");
+}
+function tickPractice() {
+  if (!tr || !$("#screen-practice-run") || $("#screen-practice-run").hidden) return;
+  const t = (tr.state === "running" && tr.t0 != null) ? (serverNow() - tr.t0) : 0;
+  const clk = $("#pr-clock"); if (clk && tr.state === "running") clk.textContent = fmt(Math.max(0, t));
+  tr.swimmers.forEach((sw, si) => {
+    const el = $(`#pr-live-${si}`); if (!el) return;
+    if (tr.state !== "running") { el.textContent = "—"; return; }
+    const st = trLiveState(sw, tr.menu, t);
+    if (st.done) { el.textContent = "完了"; return; }
+    const lapInfo = st.lpr > 1 ? `・ラップ${st.lapInRep}/${st.lpr}` : "";
+    el.textContent = st.phase === "wait"
+      ? `${st.currentRep}本目 出発まで ${fmtCd(st.value)}s`
+      : `${st.currentRep}本目 ${fmt(st.value)}${lapInfo}`;
+  });
+}
+
+// ── 確認・保存 ──
+function trEnd() {
+  if (!tr) return;
+  trReview = tr.swimmers.map((sw) => ({ sw, reps: trComputeReps(sw, tr.menu) })).filter((r) => r.reps.length > 0);
+  renderPracticeReview();
+  show("screen-practice-review");
+}
+function renderPracticeReview() {
+  $("#prv-menu").textContent = trMenuLabel(tr.menu);
+  if (!trReview || !trReview.length) {
+    $("#prv-body").innerHTML = `<p class="empty">記録された本数がありません。</p>`;
+    $("#btn-prv-save").disabled = true; return;
+  }
+  $("#btn-prv-save").disabled = false;
+  $("#prv-body").innerHTML = trReview.map(({ sw, reps }) => {
+    const times = reps.map((r) => r.timeMs);
+    const avg = times.reduce((a, b) => a + b, 0) / times.length;
+    const rows = reps.map((r) => `<div class="prv-row${r.madeCircle ? "" : " late"}"><span class="i">${r.repNo}</span><span class="tm">${fmt(r.timeMs)}</span><span class="dr">${fmtDrop(r.dropMs)}</span><span class="ci">${r.madeCircle ? "◯ 余裕" + fmtCd(r.restMs) + "s" : "× 遅れ"}</span></div>`).join("");
+    return `<div class="prv-sw"><div class="prv-h"><b>${escapeHtml(sw.name)}</b><span>平均 ${fmt(avg)}・${reps.length}本</span></div><div class="prv-cap"><span>本</span><span>タイム</span><span>落ち幅</span><span>サークル</span></div>${rows}</div>`;
+  }).join("");
+}
+function trSave() {
+  if (!tr || !trReview || !trReview.length) { trDiscard(); return; }
+  const m = tr.menu, label = trMenuLabel(m);
+  trReview.forEach(({ sw, reps }) => {
+    const times = reps.map((r) => r.timeMs);
+    const rec = {
+      dateISO: tr.dateISO, poolLength: m.poolLength, lane: tr.lane || null,
+      menu: { distance: m.distance, reps: m.reps, circleMs: m.circleMs, lapMode: m.lapMode || "none", startGapMs: m.startGapMs || 0, label },
+      memberId: sw.memberId || null, name: sw.name, school: sw.school || OWN_SCHOOL, offsetMs: sw.offsetMs || 0,
+      doneReps: reps.length,
+      reps: reps.map((r) => ({ repNo: r.repNo, startMs: Math.round(r.startMs), finishMs: Math.round(r.finishMs), timeMs: Math.round(r.timeMs), madeCircle: !!r.madeCircle, restMs: Math.round(r.restMs), dropMs: r.dropMs == null ? null : Math.round(r.dropMs), laps: (r.laps || []).map((x) => Math.round(x)) })),
+      avgMs: Math.round(times.reduce((a, b) => a + b, 0) / times.length),
+      bestRepMs: Math.min(...times), worstRepMs: Math.max(...times),
+      totalDropMs: times.length > 1 ? (times[times.length - 1] - times[0]) : 0,
+      createdAt: serverTimestamp()
+    };
+    set(push(ref(db, TRAINING)), rec);
+  });
+  toast(`${trReview.length}名分の練習記録を保存しました`);
+  trCleanup(); show("screen-role");
+}
+function trDiscard() { trCleanup(); show("screen-role"); }
+function trCleanup() { tr = null; trReview = null; trSetup = null; }
 
 // ══ 記録会（フェーズ1：作成・エントリー） ══════════════
 function meetList() {
@@ -1824,6 +2056,28 @@ $("#manual-laps").addEventListener("click", (e) => { const d = e.target.closest(
 $("#btn-add-lap").addEventListener("click", () => { $("#manual-laps").insertAdjacentHTML("beforeend", lapRowHtml("", "")); });
 document.querySelector(".lap-quick").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; manualQuickFill(b.dataset.q); });
 $("#btn-save-manual").addEventListener("click", saveManual);
+
+// 練習計測
+$("#btn-practice").addEventListener("click", enterPracticeSetup);
+$("#ps-back").addEventListener("click", () => { trCleanup(); show("screen-role"); });
+$("#ps-add").addEventListener("change", (e) => { if (e.target.value) { trAddSwimmer(e.target.value); e.target.value = ""; } });
+$("#ps-gap").addEventListener("input", renderPracticeSetup);
+$("#ps-order").addEventListener("click", (e) => {
+  const rm = e.target.closest("[data-ps-rm]"); if (rm) return trRemoveSwimmer(Number(rm.dataset.psRm));
+  const up = e.target.closest("[data-ps-up]"); if (up) return trMoveSwimmer(Number(up.dataset.psUp), -1);
+  const dn = e.target.closest("[data-ps-dn]"); if (dn) return trMoveSwimmer(Number(dn.dataset.psDn), 1);
+});
+$("#ps-pool").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; trSetup.poolLength = Number(b.dataset.pool); $$("#ps-pool button").forEach((x) => x.classList.toggle("on", x === b)); });
+$("#ps-lap").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; trSetup.lapMode = b.dataset.lap; $$("#ps-lap button").forEach((x) => x.classList.toggle("on", x === b)); });
+$("#btn-ps-begin").addEventListener("click", trBegin);
+$("#btn-pr-start").addEventListener("click", trStart);
+$("#btn-pr-undo").addEventListener("click", trUndo);
+$("#btn-pr-end").addEventListener("click", trEnd);
+$("#pr-cards").addEventListener("click", (e) => { const c = e.target.closest("[data-pr-si]"); if (c) trPress(Number(c.dataset.prSi)); });
+$("#pr-back").addEventListener("click", () => { if (confirm("計測を中止して戻りますか？（記録は保存されません）")) { trCleanup(); show("screen-role"); } });
+$("#btn-prv-save").addEventListener("click", trSave);
+$("#btn-prv-discard").addEventListener("click", trDiscard);
+$("#prv-back").addEventListener("click", () => { show("screen-practice-run"); });
 
 show("screen-role");
 
