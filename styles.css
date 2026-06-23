@@ -493,3 +493,7 @@ button { font-family: inherit; }
 .rwho .rsch { font-size: 11px; color: var(--muted); margin-left: 6px; font-weight: 600; }
 .rwho .pb { font-size: 11px; color: var(--orange-deep); font-weight: 800; margin-left: 6px; }
 .rtime { font-variant-numeric: tabular-nums; font-weight: 800; color: var(--blue-deep); }
+
+/* ── ホーム：記録会エントリー・結果ボタン ── */
+.meetpub-btn { margin: 8px 0 16px; }
+.meet-card.done { opacity: .85; border-style: dashed; }

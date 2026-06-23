@@ -28,9 +28,9 @@
           <span class="role-desc">レーンを担当してラップ・ゴールを記録</span>
         </button>
       </div>
-      <div id="top-meets" class="top-meets"></div>
+      <button class="big blue meetpub-btn" id="btn-meetpub">🏁 記録会のエントリー・結果</button>
       <div class="util-row">
-        <button class="ghost" data-go="meets">🏁 記録会</button>
+        <button class="ghost" data-go="meets">🏁 記録会の管理</button>
         <button class="ghost" data-go="members">👥 メンバー登録</button>
         <button class="ghost" data-go="records">📋 記録を見る</button>
       </div>
@@ -45,21 +45,13 @@
       </header>
 
       <div id="starter-config">
-      <div class="pool-pick">
-        <span>モード</span>
-        <div class="seg" id="mode-seg">
-          <button data-mode="practice" class="on">練習</button>
-          <button data-mode="meet">記録会</button>
-        </div>
-      </div>
-      <p class="hint" id="mode-note" hidden>記録会モード：下で記録会とレースを選び「この組をセット」すると、プログラムどおりに各レーンへ選手が入ります。</p>
       <div id="starter-meet" hidden>
-        <label class="field"><span>記録会</span><select id="sm-meet"><option value="">— 記録会を選択 —</option></select></label>
+        <p class="hint" id="sm-meet-name"></p>
         <label class="field"><span>レース</span><select id="sm-race"></select></label>
         <button id="btn-sm-load" class="big ghost">この組をレーンにセット</button>
       </div>
 
-      <div class="pool-pick">
+      <div class="pool-pick" id="pool-row">
         <span>コース</span>
         <div class="seg" id="pool-seg">
           <button data-pool="25" class="on">短水路</button>
@@ -416,7 +408,9 @@
         <div id="meet-meta" class="meet-meta"></div>
         <div id="meet-entry-count" class="meet-count"></div>
       </div>
+      <p class="hint" id="meet-finished-note" hidden>この記録会は終了しました。エントリー・記録はできません（結果の確認のみ）。</p>
       <button id="btn-meet-entry" class="big blue">✏️ エントリー</button>
+      <button id="btn-meet-rec" class="big blue">🎯 記録する</button>
       <button id="btn-meet-seed" class="big ghost">🧩 組み分け（自動シード）</button>
       <button id="btn-meet-program" class="big ghost">📋 プログラム / リザルト</button>
       <button id="meet-copy-link" class="big ghost">🔗 他校用リンクをコピー</button>
@@ -479,6 +473,31 @@
       <div id="program-list" class="program-list"></div>
     </section>
 
+    <!-- 公開：記録会のエントリー・結果 -->
+    <section id="screen-meet-public" class="screen" hidden>
+      <header class="bar"><button class="ghost back" id="meetpub-back">← 戻る</button><h2>記録会</h2></header>
+      <div class="sec-title">開始前の記録会</div>
+      <div id="pub-upcoming" class="meet-list"></div>
+      <div class="sec-title" style="margin-top:18px;">終了した記録会</div>
+      <div id="pub-finished" class="meet-list"></div>
+    </section>
+
+    <!-- 記録会：記録の役割選択 -->
+    <section id="screen-meet-rec" class="screen" hidden>
+      <header class="bar"><button class="ghost back" id="mrec-back">← 戻る</button><h2>記録する</h2></header>
+      <p class="lead">この端末の役割を選んでください。</p>
+      <div class="role-grid">
+        <button class="role-btn role-starter" id="mrec-starter">
+          <span class="role-name">スターター</span>
+          <span class="role-desc">レースを選んで全端末を同時にスタート</span>
+        </button>
+        <button class="role-btn role-recorder" id="mrec-recorder">
+          <span class="role-name">記録者</span>
+          <span class="role-desc">レーンを担当してラップ・ゴールを記録</span>
+        </button>
+      </div>
+    </section>
+
   </main>
 
   <div id="toast" class="toast"></div>
@@ -506,6 +525,6 @@
   <div id="flash" aria-hidden="true"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script type="module" src="./app.js?v=20260623c"></script>
+  <script type="module" src="./app.js?v=20260623d"></script>
 </body>
 </html>

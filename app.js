@@ -37,6 +37,7 @@ const EVENTS = {
 let serverOffset = 0;
 let role = null;
 let myLane = null;
+let timingMeetId = null;   // 記録会の計測対象（nullなら練習）
 let ringHere = false;
 let lastBeepRaceId = null;
 let race = null;
@@ -240,7 +241,7 @@ onValue(ref(db, MEETS), (s) => {
   if (!$("#screen-meet").hidden) renderMeet();
   if (!$("#screen-entry").hidden) renderEntryList();
   if (!$("#screen-program").hidden) renderProgram();
-  if (!$("#screen-role").hidden) renderTopMeets();
+  if (!$("#screen-meet-public").hidden) renderMeetPublic();
 });
 onValue(ref(db, `${SETTINGS}/viewPassHash`), (s) => { viewPassHash = s.val() || null; });
 
@@ -264,33 +265,31 @@ function setConfig() {
   if (race && race.state !== "running") update(ref(db, RACE), { poolLength: pool, lapMode, mode });
 }
 function syncStarterControls() {
+  const meetMode = !!timingMeetId;
+  $("#pool-row").hidden = meetMode;
+  $("#starter-meet").hidden = !meetMode;
   $$("#pool-seg button").forEach((x) => x.classList.toggle("on", Number(x.dataset.pool) === pool));
   $$("#lap-seg button").forEach((x) => x.classList.toggle("on", x.dataset.lap === lapMode));
-  $$("#mode-seg button").forEach((x) => x.classList.toggle("on", x.dataset.mode === mode));
-  $("#mode-note").hidden = mode !== "meet";
-  $("#starter-meet").hidden = mode !== "meet";
-  if (mode === "meet") populateStarterMeet();
+  if (meetMode) populateStarterMeet();
 }
 function isMeetMode() { return !!(race && race.mode === "meet" && race.meetId); }
+function inMeetTiming() { return !!timingMeetId || isMeetMode(); }
+function meetProgramRaces(meetId) { const m = meets[meetId]; if (!m || !m.program) return []; return (Array.isArray(m.program.races) ? m.program.races : Object.values(m.program.races)).filter(Boolean); }
 function populateStarterMeet() {
-  const withProg = meetList().filter((m) => m.program);
-  const sel = $("#sm-meet"); if (!sel) return;
-  const cur = sel.value || (race && race.meetId) || (currentMeetId && meets[currentMeetId] && meets[currentMeetId].program ? currentMeetId : "");
-  sel.innerHTML = `<option value="">— 記録会を選択 —</option>` + withProg.map((m) => `<option value="${m.id}">${escapeHtml(m.name)}</option>`).join("");
-  if (cur && meets[cur] && meets[cur].program) sel.value = cur;
+  const m = meets[timingMeetId];
+  $("#sm-meet-name").textContent = m ? `${m.name}（${m.poolLength === 50 ? "長水路" : "短水路"}）` : "";
   populateStarterRaces();
 }
-function meetProgramRaces(meetId) { const m = meets[meetId]; if (!m || !m.program) return []; return (Array.isArray(m.program.races) ? m.program.races : Object.values(m.program.races)).filter(Boolean); }
 function populateStarterRaces() {
   const sel = $("#sm-race"); if (!sel) return;
-  const races = meetProgramRaces($("#sm-meet").value);
+  const races = meetProgramRaces(timingMeetId);
   const cur = sel.value;
   sel.innerHTML = races.length ? races.map((r, i) => `<option value="${i}">第${r.raceNo}レース　${r.distance}m ${escapeHtml(r.label)}</option>`).join("") : `<option value="">（プログラムなし）</option>`;
   if (cur && races[Number(cur)]) sel.value = cur;
 }
 function loadMeetRace() {
-  const meetId = $("#sm-meet").value, m = meets[meetId];
-  if (!m || !m.program) { alert("確定済みプログラムのある記録会を選んでください。"); return; }
+  const meetId = timingMeetId, m = meets[meetId];
+  if (!m || !m.program) { alert("プログラムがありません。"); return; }
   const races = meetProgramRaces(meetId), r = races[Number($("#sm-race").value)];
   if (!r) { alert("レースを選んでください。"); return; }
   const lanes = {};
@@ -1163,7 +1162,7 @@ function updateJoinEnabled() {
 function onLaneChosen(lane) {
   myLane = lane;
   const a = race?.lanes?.[lane] || null;
-  if (isMeetMode()) {
+  if (inMeetTiming()) {
     $("#assign-area").hidden = true;
     $("#assign-readonly").hidden = false;
     if (a && a.name) {
@@ -1189,7 +1188,7 @@ function joinLane() {
   }
   ensureAudio();
   ringHere = $("#ring-here").checked;
-  if (isMeetMode()) {
+  if (inMeetTiming()) {
     const a = race.lanes?.[myLane];
     if (!a || !a.name) { alert("このレーンには割り当てがありません。"); return; }
     // 割り当てはプログラム由来。上書きせずそのまま記録。
@@ -1314,6 +1313,7 @@ function deleteMeet() {
 }
 
 // 記録会のハブ
+function isMeetFinished(m) { return (m && (m.dateISO || "")) < todayISO(); }
 function renderMeet() {
   const m = currentMeet();
   if (!m) {
@@ -1324,11 +1324,14 @@ function renderMeet() {
   $("#meet-meta").textContent = `${m.dateISO || ""}・${m.poolLength === 50 ? "長水路" : "短水路"}${m.hasOther && (m.schools || []).length ? `・他校：${m.schools.join("、")}` : ""}`;
   const n = m.entries ? Object.keys(m.entries).length : 0;
   $("#meet-entry-count").textContent = `エントリー ${n}件`;
-  const r = meetRestricted;
-  $("#btn-meet-seed").hidden = r;
-  $("#btn-meet-delete").hidden = r;
-  $("#meet-copy-link").hidden = r;
-  $("#meet-back").style.display = guestLink ? "none" : "";
+  const restricted = meetRestricted, finished = isMeetFinished(m), guest = guestLink;
+  $("#meet-finished-note").hidden = !finished;
+  $("#btn-meet-entry").hidden = finished;
+  $("#btn-meet-rec").hidden = finished || guest;
+  $("#btn-meet-seed").hidden = restricted || finished;
+  $("#btn-meet-delete").hidden = restricted;
+  $("#meet-copy-link").hidden = restricted;
+  $("#meet-back").style.display = guest ? "none" : "";
 }
 function resetMeetMode() { meetRestricted = false; guestLink = false; }
 function enterRestrictedMeet(id, fromLink) {
@@ -1341,14 +1344,26 @@ function copyMeetLink() {
   if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done).catch(() => prompt("コピーできない場合は手動でコピーしてください：", url));
   else prompt("以下のリンクをコピーしてください：", url);
 }
-function renderTopMeets() {
-  const wrap = $("#top-meets"); if (!wrap) return;
+// 公開：記録会のエントリー・結果（開始前／終了で分けて表示）
+function renderMeetPublic() {
   const today = todayISO();
-  const list = meetList().filter((m) => (m.dateISO || "") >= today);
-  wrap.innerHTML = list.length
-    ? `<div class="top-meets-title">開始前の記録会</div>` + list.map((m) => `<button class="meet-card top" data-topmeet="${m.id}"><span class="mc-name">🏁 ${escapeHtml(m.name || "(無題)")}</span><span class="mc-sub">${escapeHtml(m.dateISO || "")}・タップでエントリー</span></button>`).join("")
-    : "";
+  const list = meetList();
+  const up = list.filter((m) => (m.dateISO || "") >= today);
+  const fin = list.filter((m) => (m.dateISO || "") < today);
+  const card = (m, done) => `<button class="meet-card${done ? " done" : ""}" data-pubmeet="${m.id}"><span class="mc-name">${done ? "🏁 " : "🏁 "}${escapeHtml(m.name || "(無題)")}</span><span class="mc-sub">${escapeHtml(m.dateISO || "")}・${m.poolLength === 50 ? "長水路" : "短水路"}${done ? "・終了（結果のみ）" : "・エントリー受付中"}</span></button>`;
+  $("#pub-upcoming").innerHTML = up.length ? up.map((m) => card(m, false)).join("") : `<p class="empty">開始前の記録会はありません。</p>`;
+  $("#pub-finished").innerHTML = fin.length ? fin.map((m) => card(m, true)).join("") : `<p class="empty">終了した記録会はありません。</p>`;
 }
+// 記録会の計測（スターター／記録者を選ぶ）
+function openMeetRec() {
+  const m = currentMeet();
+  if (!m || !m.program) { alert("先に「組み分け」を実行して確定してください。"); return; }
+  if (isMeetFinished(m)) { alert("終了した記録会のため、記録はできません。"); return; }
+  timingMeetId = currentMeetId;
+  show("screen-meet-rec");
+}
+function enterTimingStarter() { role = "starter"; syncStarterControls(); show("screen-starter"); onRaceChanged(); }
+function enterTimingRecorder() { role = "recorder"; resetRecorderSetup(); show("screen-recorder-setup"); }
 
 // エントリー
 function openEntry() { entryKind = "indiv"; show("screen-entry"); renderEntryForm(); renderEntryList(); }
@@ -1638,8 +1653,8 @@ function renderResults() {
 }
 
 // ── イベント結線 ───────────────────────────────────────
-$$(".role-btn").forEach((b) => b.addEventListener("click", () => {
-  role = b.dataset.role;
+$$("#screen-role .role-btn").forEach((b) => b.addEventListener("click", () => {
+  role = b.dataset.role; timingMeetId = null; mode = "practice";
   if (role === "starter") { ensureReady(); syncStarterControls(); show("screen-starter"); onRaceChanged(); }
   else { resetRecorderSetup(); show("screen-recorder-setup"); }
 }));
@@ -1655,7 +1670,7 @@ $$("[data-go]").forEach((b) => b.addEventListener("click", async () => {
 
 $$("[data-back]").forEach((b) => b.addEventListener("click", () => {
   if (role === "recorder" && !$("#screen-recorder").hidden) { resetRecorderSetup(); show("screen-recorder-setup"); return; }
-  role = null; myLane = null;
+  role = null; myLane = null; timingMeetId = null;
   show("screen-role");
 }));
 
@@ -1663,13 +1678,14 @@ $$("[data-back]").forEach((b) => b.addEventListener("click", () => {
 $("#btn-meet-new").addEventListener("click", openMeetNew);
 $("#meet-new-back").addEventListener("click", () => { show("screen-meets"); renderMeets(); });
 $("#meet-back").addEventListener("click", () => {
-  if (meetRestricted && !guestLink) { resetMeetMode(); show("screen-role"); renderTopMeets(); return; }
+  if (meetRestricted && !guestLink) { resetMeetMode(); show("screen-meet-public"); renderMeetPublic(); return; }
   resetMeetMode(); show("screen-meets"); renderMeets();
 });
 $("#entry-back").addEventListener("click", () => { show("screen-meet"); renderMeet(); });
 $("#btn-meet-create").addEventListener("click", createMeet);
 $("#btn-meet-delete").addEventListener("click", deleteMeet);
 $("#btn-meet-entry").addEventListener("click", openEntry);
+$("#btn-meet-rec").addEventListener("click", openMeetRec);
 $("#btn-meet-seed").addEventListener("click", seedMeet);
 $("#btn-meet-program").addEventListener("click", openProgram);
 $("#program-back").addEventListener("click", () => { if (programEditMode) cancelProgramEdit(); else { show("screen-meet"); renderMeet(); } });
@@ -1682,11 +1698,17 @@ $("#program-list").addEventListener("click", (e) => {
   onLaneTap(Number(row.dataset.ridx), Number(row.dataset.lane));
 });
 $("#program-tabs").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; programTab = b.dataset.ptab; renderProgram(); });
-$("#sm-meet").addEventListener("change", populateStarterRaces);
 $("#btn-sm-load").addEventListener("click", loadMeetRace);
 $("#meet-copy-link").addEventListener("click", copyMeetLink);
 $("#meet-list").addEventListener("click", (e) => { const b = e.target.closest("[data-meet]"); if (!b) return; resetMeetMode(); currentMeetId = b.dataset.meet; show("screen-meet"); renderMeet(); });
-$("#top-meets").addEventListener("click", (e) => { const b = e.target.closest("[data-topmeet]"); if (!b) return; enterRestrictedMeet(b.dataset.topmeet, false); });
+// 公開：記録会のエントリー・結果
+$("#btn-meetpub").addEventListener("click", () => { renderMeetPublic(); show("screen-meet-public"); });
+$("#meetpub-back").addEventListener("click", () => { show("screen-role"); });
+$("#screen-meet-public").addEventListener("click", (e) => { const b = e.target.closest("[data-pubmeet]"); if (!b) return; enterRestrictedMeet(b.dataset.pubmeet, false); });
+// 記録会の計測（役割選択）
+$("#mrec-back").addEventListener("click", () => { show("screen-meet"); renderMeet(); });
+$("#mrec-starter").addEventListener("click", enterTimingStarter);
+$("#mrec-recorder").addEventListener("click", enterTimingRecorder);
 // メンバー：ゲスト表示切替
 $("#show-guests").addEventListener("change", (e) => { showGuests = e.target.checked; renderMembers(); });
 // 記録会：新規作成フォーム
@@ -1739,13 +1761,6 @@ $("#btn-rec-save").addEventListener("click", saveFinished);
 $("#btn-rec-next").addEventListener("click", nextRecord);
 $("#modal-cancel").addEventListener("click", () => { $("#unsaved-modal").hidden = true; });
 $("#modal-proceed").addEventListener("click", leaveFinished);
-$("#mode-seg").addEventListener("click", (e) => {
-  const b = e.target.closest("button"); if (!b) return;
-  mode = b.dataset.mode;
-  $$("#mode-seg button").forEach((x) => x.classList.toggle("on", x === b));
-  $("#mode-note").hidden = mode !== "meet";
-  setConfig();
-});
 
 $("#lane-pick").innerHTML = [1, 2, 3, 4, 5, 6].map((n) => `<button class="lane-opt" data-lane="${n}">${n}</button>`).join("");
 $("#lane-pick").addEventListener("click", (e) => {
