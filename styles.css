@@ -550,3 +550,31 @@ button { font-family: inherit; }
 .seg-cell { font-size: 12px; font-variant-numeric: tabular-nums; }
 .seg-cell b { color: var(--ink); font-weight: 700; }
 .seg-cell i { margin-left: 4px; font-style: normal; font-weight: 700; }
+
+/* ── 練習分析 ───────────────────────────────────────── */
+.recmode button { padding: 12px 6px; font-size: 14px; }
+.tr-dates { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.tr-date { border: 1px solid var(--line); background: var(--surface); color: var(--blue-deep); border-radius: 999px; padding: 8px 14px; font-size: 14px; font-weight: 700; cursor: pointer; }
+.tr-date.on { background: var(--blue); color: #fff; border-color: var(--blue); }
+.tr-menus { display: grid; gap: 8px; margin-bottom: 8px; }
+.tr-menu { background: var(--surface); border: 2px solid var(--line); border-radius: 12px; padding: 10px 12px; cursor: pointer; }
+.tr-menu.on { border-color: var(--blue); box-shadow: var(--shadow); }
+.tm-top { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.tm-avg { margin-left: auto; font-size: 13px; color: var(--muted); font-weight: 700; }
+.tm-label { font-weight: 700; color: var(--ink); font-size: 14px; }
+.tm-label i { color: var(--muted); font-style: normal; font-weight: 400; }
+.tr-tag { display: inline-block; font-size: 11px; font-weight: 800; color: #fff; border-radius: 6px; padding: 2px 7px; }
+.tr-tag.type { background: var(--blue-deep); }
+.tr-tag.cat-A { background: #22a06b; }
+.tr-tag.cat-B { background: #1577dd; }
+.tr-tag.cat-C { background: #0e7490; }
+.tr-tag.cat-D { background: #e0a800; }
+.tr-tag.cat-E { background: #d7263d; }
+.tr-d-head { display: flex; flex-direction: column; gap: 2px; margin: 8px 0 10px; }
+.tr-d-head b { font-size: 15px; color: var(--blue-deep); }
+.tr-d-head span { font-size: 13px; color: var(--muted); }
+.tr-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
+.tr-stat { background: var(--blue-soft); border-radius: 10px; padding: 8px 4px; text-align: center; }
+.tr-stat span { display: block; font-size: 11px; color: var(--muted); }
+.tr-stat b { font-size: 16px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.tr-stat b i { font-size: 11px; color: var(--muted); font-style: normal; font-weight: 400; }

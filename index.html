@@ -316,6 +316,7 @@
         <button data-rmode="indiv" class="on">個人</button>
         <button data-rmode="relay">リレー</button>
         <button data-rmode="ranking">ランキング</button>
+        <button data-rmode="practice">練習</button>
       </div>
 
       <!-- 個人 -->
@@ -376,6 +377,22 @@
         <div id="rank-year"></div>
         <div class="sec-title">歴代</div>
         <div id="rank-all"></div>
+      </div>
+
+      <!-- 練習 -->
+      <div id="pane-practice" class="rec-pane" hidden>
+        <label class="field"><span>選手</span>
+          <select id="tr-filter"><option value="">— 選手を選択 —</option></select>
+        </label>
+        <div id="tr-body" hidden>
+          <div class="sec-title">練習日（タップで表示）</div>
+          <div id="tr-dates" class="tr-dates"></div>
+          <div id="tr-menus-wrap" hidden>
+            <div class="sec-title" id="tr-date-label">メニュー</div>
+            <div id="tr-menus" class="tr-menus"></div>
+          </div>
+          <div id="tr-detail" hidden></div>
+        </div>
       </div>
 
       <!-- レース分析 -->
@@ -608,6 +625,6 @@
   <div id="flash" aria-hidden="true"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script type="module" src="./app.js?v=20260623g"></script>
+  <script type="module" src="./app.js?v=20260623h"></script>
 </body>
 </html>
