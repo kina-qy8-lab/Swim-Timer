@@ -182,26 +182,29 @@
         <span class="spacer"></span>
       </header>
       <p class="lead">レーン内の選手を出発順に追加してください（最大5名）。</p>
+      <label class="field"><span>練習名（任意）</span><input id="ps-name" type="text" placeholder="例：HARD / EASY / DASH" /></label>
       <label class="field"><span>選手（出発順に追加）</span>
         <select id="ps-add"><option value="">＋ 選手を追加</option></select>
       </label>
       <div class="ps-order" id="ps-order"></div>
       <div class="frow">
-        <label class="field"><span>出発間隔（秒）</span><input id="ps-gap" type="number" inputmode="numeric" min="0" step="1" value="5" /></label>
-        <label class="field"><span>レーン（任意）</span><select id="ps-lane"></select></label>
-      </div>
-      <div class="frow">
         <label class="field"><span>1本の距離(m)</span><input id="ps-distance" type="number" inputmode="numeric" min="0" step="25" value="100" /></label>
         <label class="field"><span>本数</span><input id="ps-reps" type="number" inputmode="numeric" min="1" step="1" value="10" /></label>
       </div>
+      <label class="field"><span>サークル（分・秒）</span>
+        <div class="circle-pick">
+          <select id="ps-cmin"></select><span class="cu">分</span>
+          <select id="ps-csec"></select><span class="cu">秒</span>
+        </div>
+      </label>
       <div class="frow">
-        <label class="field"><span>サークル（分:秒）</span><input id="ps-circle" type="text" inputmode="text" placeholder="1:30" value="1:30" /></label>
+        <label class="field"><span>出発間隔（秒）</span><input id="ps-gap" type="number" inputmode="numeric" min="0" step="1" value="5" /></label>
         <label class="field"><span>プール</span>
           <div class="seg" id="ps-pool"><button data-pool="25" class="on">25m</button><button data-pool="50">50m</button></div>
         </label>
       </div>
-      <label class="field"><span>ラップ計測</span>
-        <div class="seg" id="ps-lap"><button data-lap="none" class="on">なし</button><button data-lap="both">あり（折り返し毎）</button></div>
+      <label class="field"><span>ラップ計測（区切り）</span>
+        <div class="seg seg4" id="ps-lap"><button data-lapd="0" class="on">なし</button><button data-lapd="25">25m</button><button data-lapd="50">50m</button><button data-lapd="100">100m</button></div>
       </label>
       <button id="btn-ps-begin" class="big start" disabled>計測へ進む</button>
     </section>
@@ -592,6 +595,6 @@
   <div id="flash" aria-hidden="true"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script type="module" src="./app.js?v=20260623e"></script>
+  <script type="module" src="./app.js?v=20260623f"></script>
 </body>
 </html>
