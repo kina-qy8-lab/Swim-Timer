@@ -473,3 +473,23 @@ button { font-family: inherit; }
 .prace.editable .prow.tap:active { background: var(--blue-soft); }
 .prow.sel { background: #fff0e0; box-shadow: inset 0 0 0 2px var(--orange); border-radius: 8px; }
 #program-edit-btn { margin-bottom: 12px; }
+
+/* ── 記録会モード：記録者の読み取り専用割当 ── */
+.assign-readonly { background: var(--blue-soft); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }
+.assign-readonly .ro-name { font-weight: 800; font-size: 18px; color: var(--blue-deep); }
+.assign-readonly .ro-ev { font-size: 13px; color: var(--muted); margin-top: 2px; }
+.assign-readonly .ro-empty { color: var(--muted); }
+#starter-meet .big { margin-top: 4px; }
+
+/* ── 種目別リザルト ── */
+.revent { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); margin-bottom: 14px; }
+.revent-head { background: var(--blue-soft); padding: 8px 12px; font-weight: 800; color: var(--blue-deep); }
+.rrow { display: grid; grid-template-columns: 34px 1fr auto; align-items: center; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--line); }
+.rrank { width: 28px; height: 28px; border-radius: 50%; background: var(--blue-soft); color: var(--blue-deep); font-weight: 800; display: flex; align-items: center; justify-content: center; font-size: 13px; }
+.rrank.rk1 { background: #ffd86b; color: #7a5b00; }
+.rrank.rk2 { background: #d8dee6; color: #46505c; }
+.rrank.rk3 { background: #f0b489; color: #6e3a17; }
+.rwho { font-weight: 700; color: var(--ink); font-size: 14px; min-width: 0; }
+.rwho .rsch { font-size: 11px; color: var(--muted); margin-left: 6px; font-weight: 600; }
+.rwho .pb { font-size: 11px; color: var(--orange-deep); font-weight: 800; margin-left: 6px; }
+.rtime { font-variant-numeric: tabular-nums; font-weight: 800; color: var(--blue-deep); }

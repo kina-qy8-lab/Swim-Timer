@@ -83,6 +83,7 @@ let meetsLoaded = false;
 let draftProgram = null;       // 編集中のプログラム下書き
 let programEditMode = false;
 let editSel = null;            // 入れ替え選択中のレーン {ridx, lane}
+let programTab = "program";    // program | results
 
 const serverNow = () => Date.now() + serverOffset;
 const todayISO = () => {
@@ -267,6 +268,39 @@ function syncStarterControls() {
   $$("#lap-seg button").forEach((x) => x.classList.toggle("on", x.dataset.lap === lapMode));
   $$("#mode-seg button").forEach((x) => x.classList.toggle("on", x.dataset.mode === mode));
   $("#mode-note").hidden = mode !== "meet";
+  $("#starter-meet").hidden = mode !== "meet";
+  if (mode === "meet") populateStarterMeet();
+}
+function isMeetMode() { return !!(race && race.mode === "meet" && race.meetId); }
+function populateStarterMeet() {
+  const withProg = meetList().filter((m) => m.program);
+  const sel = $("#sm-meet"); if (!sel) return;
+  const cur = sel.value || (race && race.meetId) || (currentMeetId && meets[currentMeetId] && meets[currentMeetId].program ? currentMeetId : "");
+  sel.innerHTML = `<option value="">— 記録会を選択 —</option>` + withProg.map((m) => `<option value="${m.id}">${escapeHtml(m.name)}</option>`).join("");
+  if (cur && meets[cur] && meets[cur].program) sel.value = cur;
+  populateStarterRaces();
+}
+function meetProgramRaces(meetId) { const m = meets[meetId]; if (!m || !m.program) return []; return (Array.isArray(m.program.races) ? m.program.races : Object.values(m.program.races)).filter(Boolean); }
+function populateStarterRaces() {
+  const sel = $("#sm-race"); if (!sel) return;
+  const races = meetProgramRaces($("#sm-meet").value);
+  const cur = sel.value;
+  sel.innerHTML = races.length ? races.map((r, i) => `<option value="${i}">第${r.raceNo}レース　${r.distance}m ${escapeHtml(r.label)}</option>`).join("") : `<option value="">（プログラムなし）</option>`;
+  if (cur && races[Number(cur)]) sel.value = cur;
+}
+function loadMeetRace() {
+  const meetId = $("#sm-meet").value, m = meets[meetId];
+  if (!m || !m.program) { alert("確定済みプログラムのある記録会を選んでください。"); return; }
+  const races = meetProgramRaces(meetId), r = races[Number($("#sm-race").value)];
+  if (!r) { alert("レースを選んでください。"); return; }
+  const lanes = {};
+  for (let L = 1; L <= 6; L++) {
+    const e = r.lanes && r.lanes[L];
+    if (e) lanes[L] = { memberId: e.memberId || null, name: e.name || "", school: e.school || "", stroke: e.stroke, distance: e.distance, isRelay: !!e.isRelay, legs: e.legs || null, entryId: e.entryId || null, done: false };
+  }
+  pool = m.poolLength || 50;
+  set(ref(db, RACE), { state: "ready", raceId: "r" + Date.now().toString(36), poolLength: pool, lapMode, mode: "meet", meetId, meetRaceNo: r.raceNo, startServerTime: null, lanes });
+  toast(`第${r.raceNo}レースをレーンにセットしました`);
 }
 function start() {
   ensureAudio();
@@ -299,6 +333,10 @@ function buildResult(laneNum, lane) {
     splits: arr.map((s) => s.elapsedMs), finalMs: arr.length ? arr[arr.length - 1].elapsedMs : 0,
     createdAt: serverTimestamp()
   };
+  if (race.meetId) {
+    base.meetId = race.meetId; base.meetRaceNo = race.meetRaceNo || null; base.entryId = lane.entryId || null;
+    base.meetName = (meets[race.meetId] && meets[race.meetId].name) || null;
+  }
   if (lane.isRelay) return { ...base, isRelay: true, name: lane.name || "リレー", school: lane.school || "", legs: lane.legs || [] };
   return { ...base, memberId: lane.memberId || null, name: lane.name, school: lane.school || "" };
 }
@@ -364,9 +402,17 @@ function saveFinished() {
   set(push(ref(db, RESULTS)), finishedResult);
   const ind = firstLegIndividual(finishedResult);
   if (ind) set(push(ref(db, RESULTS)), ind);
+  if (finishedResult.meetId && finishedResult.entryId) {
+    set(ref(db, `${MEETS}/${finishedResult.meetId}/results/${finishedResult.entryId}`), {
+      finalMs: finishedResult.finalMs, splits: finishedResult.splits || [], lane: finishedResult.lane || null,
+      raceNo: finishedResult.meetRaceNo || null, stroke: finishedResult.stroke, distance: finishedResult.distance,
+      name: finishedResult.name, school: finishedResult.school || "", isRelay: !!finishedResult.isRelay,
+      memberId: finishedResult.memberId || null, legs: finishedResult.legs || null, savedAt: serverTimestamp()
+    });
+  }
   finishedSaved = true;
   $("#btn-rec-save").disabled = true;
-  $("#rec-review .review-msg").textContent = ind ? "✓ 保存しました（第1泳者の個人記録も追加）" : "✓ 保存しました";
+  $("#rec-review .review-msg").textContent = finishedResult.meetId ? "✓ 保存しました（プログラムに反映）" : (ind ? "✓ 保存しました（第1泳者の個人記録も追加）" : "✓ 保存しました");
 }
 function nextRecord() {
   if (!finishedSaved) { $("#unsaved-modal").hidden = false; return; }
@@ -1066,6 +1112,7 @@ function resetRecorderSetup() {
   myLane = null;
   $$(".lane-opt").forEach((x) => x.classList.remove("sel"));
   $("#assign-area").hidden = true;
+  $("#assign-readonly").hidden = true;
   $("#setup-hint").hidden = true;
   $("#btn-join").disabled = true;
 }
@@ -1116,6 +1163,19 @@ function updateJoinEnabled() {
 function onLaneChosen(lane) {
   myLane = lane;
   const a = race?.lanes?.[lane] || null;
+  if (isMeetMode()) {
+    $("#assign-area").hidden = true;
+    $("#assign-readonly").hidden = false;
+    if (a && a.name) {
+      $("#assign-readonly").innerHTML = `<div class="ro-name">${escapeHtml(a.name)}</div><div class="ro-ev">${escapeHtml(a.stroke || "")} ${a.distance || ""}m${a.school ? `・${escapeHtml(a.school)}` : ""}</div>`;
+      $("#btn-join").disabled = false;
+    } else {
+      $("#assign-readonly").innerHTML = `<div class="ro-empty">この組ではレーン${lane}に割り当てがありません。</div>`;
+      $("#btn-join").disabled = true;
+    }
+    return;
+  }
+  $("#assign-readonly").hidden = true;
   $("#assign-area").hidden = false;
   $("#setup-hint").hidden = memberList().length !== 0;
   $("#ev-stroke").value = a?.stroke || "自由形";
@@ -1129,24 +1189,30 @@ function joinLane() {
   }
   ensureAudio();
   ringHere = $("#ring-here").checked;
-  const stroke = $("#ev-stroke").value;
-  const distance = stroke ? Number($("#ev-dist").value) : null;
-  let laneData;
-  if (isRelayStroke(stroke)) {
-    const legs = $$("#relay-legs .leg-pick").map((s, i) => {
-      if (!s.value || !members[s.value]) return null;
-      const m = members[s.value];
-      return { memberId: s.value, name: m.name, school: m.school || "", legStroke: stroke === "メドレーリレー" ? MEDLEY_ORDER[i] : "自由形" };
-    }).filter(Boolean);
-    if (!legs.length) return;
-    laneData = { isRelay: true, name: legs.map((l) => l.name).join("→"), school: legs[0].school || "", stroke, distance, legs, memberId: null };
+  if (isMeetMode()) {
+    const a = race.lanes?.[myLane];
+    if (!a || !a.name) { alert("このレーンには割り当てがありません。"); return; }
+    // 割り当てはプログラム由来。上書きせずそのまま記録。
   } else {
-    const id = $("#swimmer-pick").value;
-    if (!id || !members[id]) return;
-    const m = members[id];
-    laneData = { memberId: id, name: m.name, school: m.school || "", stroke: stroke || null, distance, isRelay: null, legs: null };
+    const stroke = $("#ev-stroke").value;
+    const distance = stroke ? Number($("#ev-dist").value) : null;
+    let laneData;
+    if (isRelayStroke(stroke)) {
+      const legs = $$("#relay-legs .leg-pick").map((s, i) => {
+        if (!s.value || !members[s.value]) return null;
+        const m = members[s.value];
+        return { memberId: s.value, name: m.name, school: m.school || "", legStroke: stroke === "メドレーリレー" ? MEDLEY_ORDER[i] : "自由形" };
+      }).filter(Boolean);
+      if (!legs.length) return;
+      laneData = { isRelay: true, name: legs.map((l) => l.name).join("→"), school: legs[0].school || "", stroke, distance, legs, memberId: null };
+    } else {
+      const id = $("#swimmer-pick").value;
+      if (!id || !members[id]) return;
+      const m = members[id];
+      laneData = { memberId: id, name: m.name, school: m.school || "", stroke: stroke || null, distance, isRelay: null, legs: null };
+    }
+    update(ref(db, `${RACE}/lanes/${myLane}`), laneData);
   }
-  update(ref(db, `${RACE}/lanes/${myLane}`), laneData);
   $("#rec-lane-label").textContent = `レーン ${myLane}`;
   lastBeepRaceId = null;
   joinedRaceId = race.raceId;
@@ -1478,7 +1544,7 @@ function cloneRaces(list) { return JSON.parse(JSON.stringify(list)); }
 function openProgram() {
   const m = currentMeet(); if (!m) return;
   if (!m.program) { alert("まだ組み分けされていません。「組み分け」を実行してください。"); return; }
-  programEditMode = false; draftProgram = null; editSel = null;
+  programEditMode = false; draftProgram = null; editSel = null; programTab = "program";
   show("screen-program"); renderProgram();
 }
 function enterProgramEdit() {
@@ -1512,27 +1578,63 @@ function confirmProgram() {
   toast("プログラムを確定しました");
   renderProgram();
 }
+function meetResults() { const m = currentMeet(); return (m && m.results) || {}; }
+function isSelfBest(r) {
+  const m = currentMeet(); if (!m || !r || r.isRelay || !r.memberId) return false;
+  const recs = allRecs().filter((x) => !x.isRelay && x.memberId === r.memberId && x.stroke === r.stroke && Number(x.distance) === Number(r.distance) && x.poolLength === m.poolLength);
+  if (!recs.length) return false;
+  return r.finalMs <= Math.min(...recs.map((x) => x.finalMs)) + 1;
+}
 function renderProgram() {
   const m = currentMeet();
   const edit = programEditMode;
-  $("#program-title").textContent = m ? `${m.name}・プログラム${edit ? "（編集中）" : ""}` : "プログラム";
+  $("#program-title").textContent = m ? `${m.name}` : "プログラム";
+  $("#program-tabs").hidden = edit;
+  $$("#program-tabs button").forEach((b) => b.classList.toggle("on", b.dataset.ptab === programTab));
   $("#program-edit-bar").hidden = !edit;
-  $("#program-edit-btn").hidden = edit || meetRestricted || !(m && m.program);
+  $("#program-edit-btn").hidden = edit || meetRestricted || programTab !== "program" || !(m && m.program);
+  if (!edit && programTab === "results") { renderResults(); return; }
+
   const races = edit ? (draftProgram || []) : programRaces();
+  const res = meetResults();
   $("#program-list").innerHTML = races.length ? races.map((r, ri) => {
     let rows = "";
     for (let L = 1; L <= 6; L++) {
       const e = r.lanes && r.lanes[L];
       const sel = edit && editSel && editSel.ridx === ri && editSel.lane === L;
       const attr = edit ? ` data-ridx="${ri}" data-lane="${L}"` : "";
+      let resultCell = edit ? "" : "—";
+      if (!edit && e && e.entryId && res[e.entryId]) { const rr = res[e.entryId]; resultCell = `${fmt(rr.finalMs)}${isSelfBest({ ...e, finalMs: rr.finalMs }) ? " 🏅" : ""}`; }
       rows += `<div class="prow${e ? "" : " empty"}${sel ? " sel" : ""}${edit ? " tap" : ""}"${attr}><span class="plane">${L}</span>`
         + (e
-          ? `<span class="pname">${escapeHtml(e.name)}${e.isRelay ? "" : `<span class="psch">${escapeHtml(e.school || "")}</span>`}${e.stroke !== r.label ? `<span class="pst">${escapeHtml(e.stroke)}</span>` : ""}</span><span class="pseed">${fmt(e.seedMs)}</span><span class="presult">${edit ? "" : "—"}</span>`
+          ? `<span class="pname">${escapeHtml(e.name)}${e.isRelay ? "" : `<span class="psch">${escapeHtml(e.school || "")}</span>`}${e.stroke !== r.label ? `<span class="pst">${escapeHtml(e.stroke)}</span>` : ""}</span><span class="pseed">${fmt(e.seedMs)}</span><span class="presult">${resultCell}</span>`
           : `<span class="pname muted">―</span><span class="pseed"></span><span class="presult"></span>`)
         + `</div>`;
     }
     return `<div class="prace${edit ? " editable" : ""}"><div class="prace-head"><span class="pno">第${r.raceNo}レース</span><span class="pev">${r.distance}m ${escapeHtml(r.label)}</span></div>${rows}</div>`;
   }).join("") : `<p class="empty">レースがありません。</p>`;
+}
+function renderResults() {
+  const m = currentMeet();
+  const res = Object.entries(meetResults()).map(([entryId, r]) => ({ entryId, ...r }));
+  if (!res.length) { $("#program-list").innerHTML = `<p class="empty">まだ記録がありません。レースを計測して保存すると、ここに種目別の順位が表示されます。</p>`; return; }
+  const groups = {};
+  res.forEach((r) => { const k = `${r.isRelay ? "R" : "I"}|${r.stroke}|${r.distance}`; (groups[k] ||= []).push(r); });
+  const keys = Object.keys(groups).sort((a, b) => {
+    const [ta, sa, da] = a.split("|"), [tb, sb, db_] = b.split("|");
+    return (ta === tb ? 0 : ta === "I" ? -1 : 1) || strokeOrderIndex(sa) - strokeOrderIndex(sb) || Number(da) - Number(db_);
+  });
+  $("#program-list").innerHTML = keys.map((k) => {
+    const list = groups[k].slice().sort((a, b) => a.finalMs - b.finalMs);
+    const [, stroke, dist] = k.split("|");
+    const rows = list.map((r, i) => {
+      const medal = i === 0 ? "rk1" : i === 1 ? "rk2" : i === 2 ? "rk3" : "";
+      const best = isSelfBest(r) ? ' <span class="pb">🏅自己ベスト</span>' : "";
+      const who = r.isRelay ? `${escapeHtml(r.school || "")}（${(r.legs || []).map((l) => escapeHtml(l.name)).join("・")}）` : `${escapeHtml(r.name)}<span class="rsch">${escapeHtml(r.school || "")}</span>`;
+      return `<div class="rrow"><span class="rrank ${medal}">${i + 1}</span><span class="rwho">${who}${best}</span><span class="rtime">${fmt(r.finalMs)}</span></div>`;
+    }).join("");
+    return `<div class="revent"><div class="revent-head">${dist}m ${escapeHtml(stroke)}</div>${rows}</div>`;
+  }).join("");
 }
 
 // ── イベント結線 ───────────────────────────────────────
@@ -1579,6 +1681,9 @@ $("#program-list").addEventListener("click", (e) => {
   const row = e.target.closest("[data-lane]"); if (!row) return;
   onLaneTap(Number(row.dataset.ridx), Number(row.dataset.lane));
 });
+$("#program-tabs").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; programTab = b.dataset.ptab; renderProgram(); });
+$("#sm-meet").addEventListener("change", populateStarterRaces);
+$("#btn-sm-load").addEventListener("click", loadMeetRace);
 $("#meet-copy-link").addEventListener("click", copyMeetLink);
 $("#meet-list").addEventListener("click", (e) => { const b = e.target.closest("[data-meet]"); if (!b) return; resetMeetMode(); currentMeetId = b.dataset.meet; show("screen-meet"); renderMeet(); });
 $("#top-meets").addEventListener("click", (e) => { const b = e.target.closest("[data-topmeet]"); if (!b) return; enterRestrictedMeet(b.dataset.topmeet, false); });

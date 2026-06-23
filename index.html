@@ -52,7 +52,12 @@
           <button data-mode="meet">記録会</button>
         </div>
       </div>
-      <p class="hint" id="mode-note" hidden>記録会モードは次のステップで対応します（現在は練習として動作します）。</p>
+      <p class="hint" id="mode-note" hidden>記録会モード：下で記録会とレースを選び「この組をセット」すると、プログラムどおりに各レーンへ選手が入ります。</p>
+      <div id="starter-meet" hidden>
+        <label class="field"><span>記録会</span><select id="sm-meet"><option value="">— 記録会を選択 —</option></select></label>
+        <label class="field"><span>レース</span><select id="sm-race"></select></label>
+        <button id="btn-sm-load" class="big ghost">この組をレーンにセット</button>
+      </div>
 
       <div class="pool-pick">
         <span>コース</span>
@@ -113,6 +118,8 @@
 
       <p class="lead">担当するレーンを選んでください。</p>
       <div class="lane-pick" id="lane-pick"></div>
+
+      <div id="assign-readonly" class="assign-readonly" hidden></div>
 
       <div id="assign-area" hidden>
         <div class="frow">
@@ -467,6 +474,7 @@
           <button id="btn-program-confirm" class="big blue">確定する</button>
         </div>
       </div>
+      <div class="seg seg-tabs" id="program-tabs"><button data-ptab="program" class="on">プログラム</button><button data-ptab="results">種目別リザルト</button></div>
       <button id="program-edit-btn" class="big ghost" hidden>✏️ 組み分けを修正する</button>
       <div id="program-list" class="program-list"></div>
     </section>
@@ -498,6 +506,6 @@
   <div id="flash" aria-hidden="true"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script type="module" src="./app.js?v=20260623b"></script>
+  <script type="module" src="./app.js?v=20260623c"></script>
 </body>
 </html>
