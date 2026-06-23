@@ -1260,7 +1260,11 @@ function trMenuLabel(menu) {
   const lap = menu.lapDistM ? `・${menu.lapDistM}mラップ` : "";
   return `${menu.distance}m×${menu.reps}　サークル${fmtCircle(menu.circleMs)}${lap}`;
 }
-function trMenuHead(menu) { return (menu.name ? escapeHtml(menu.name) + "　" : "") + trMenuLabel(menu); }
+function trMenuHead(menu) {
+  const tag = [menu.category, menu.strokeType].filter(Boolean).join("・");
+  const memo = menu.name ? `（${escapeHtml(menu.name)}）` : "";
+  return (tag ? escapeHtml(tag) + "　" : "") + trMenuLabel(menu) + memo;
+}
 // rep内の各区間タイムと、直前区間との落ち幅
 function trSegTimes(rep) { const laps = rep.laps || [], out = []; let prev = 0; for (let j = 0; j < laps.length; j++) { out.push(laps[j] - prev); prev = laps[j]; } return out; }
 function trSegHtml(rep) {
@@ -1315,7 +1319,7 @@ function trLiveState(sw, menu, t) {
 // ── 設定画面 ──
 function enterPracticeSetup() {
   role = null; myLane = null; timingMeetId = null;
-  trSetup = { order: [], poolLength: 25, lapDistM: 0 };
+  trSetup = { order: [], poolLength: 25, lapDistM: 0, strokeType: "Swim" };
   if (!$("#ps-distance").value) $("#ps-distance").value = 100;
   if (!$("#ps-reps").value) $("#ps-reps").value = 10;
   if (!$("#ps-gap").value) $("#ps-gap").value = 5;
@@ -1324,6 +1328,7 @@ function enterPracticeSetup() {
     $("#ps-csec").innerHTML = Array.from({ length: 60 }, (_, i) => `<option value="${i}">${String(i).padStart(2, "0")}</option>`).join("");
     $("#ps-cmin").value = "1"; $("#ps-csec").value = "30"; $("#ps-cmin").dataset.filled = "1";
   }
+  $("#ps-cat").value = "";
   renderPracticeSetup();
   show("screen-practice-setup");
 }
@@ -1338,6 +1343,7 @@ function renderPracticeSetup() {
   if (!trSetup) return;
   $$("#ps-pool button").forEach((x) => x.classList.toggle("on", Number(x.dataset.pool) === trSetup.poolLength));
   $$("#ps-lap button").forEach((x) => x.classList.toggle("on", Number(x.dataset.lapd) === trSetup.lapDistM));
+  $$("#ps-type button").forEach((x) => x.classList.toggle("on", x.dataset.type === trSetup.strokeType));
   const chosen = new Set(trSetup.order);
   const opts = memberList().filter((m) => !m.retired && (m.school || OWN_SCHOOL) === OWN_SCHOOL && !chosen.has(m.id));
   $("#ps-add").innerHTML = `<option value="">＋ 選手を追加</option>` + opts.map((m) => `<option value="${m.id}">${escapeHtml(m.name)}（${m.grade || ""}年）</option>`).join("");
@@ -1358,8 +1364,10 @@ function trBegin() {
   const circleMs = (Number($("#ps-cmin").value || 0) * 60 + Number($("#ps-csec").value || 0)) * 1000;
   const gapSec = Number($("#ps-gap").value || 0);
   const name = ($("#ps-name").value || "").trim();
+  const category = $("#ps-cat").value || "";
+  const strokeType = trSetup.strokeType || "Swim";
   if (!distance || !reps || !circleMs) { alert("距離・本数・サークルを正しく入力してください。"); return; }
-  const menu = { name, poolLength: trSetup.poolLength, distance, reps, circleMs, lapDistM: trSetup.lapDistM || 0, startGapMs: Math.round(gapSec * 1000) };
+  const menu = { name, category, strokeType, poolLength: trSetup.poolLength, distance, reps, circleMs, lapDistM: trSetup.lapDistM || 0, startGapMs: Math.round(gapSec * 1000) };
   const swimmers = trSetup.order.map((id, i) => {
     const m = members[id] || {};
     return { memberId: id, name: m.name || "—", school: m.school || OWN_SCHOOL, offsetMs: i * menu.startGapMs, presses: [] };
@@ -1476,7 +1484,7 @@ function trSave() {
     const times = reps.map((r) => r.timeMs);
     const rec = {
       dateISO: tr.dateISO, poolLength: m.poolLength,
-      menu: { name: m.name || "", distance: m.distance, reps: m.reps, circleMs: m.circleMs, lapDistM: m.lapDistM || 0, startGapMs: m.startGapMs || 0, label },
+      menu: { name: m.name || "", category: m.category || "", strokeType: m.strokeType || "", distance: m.distance, reps: m.reps, circleMs: m.circleMs, lapDistM: m.lapDistM || 0, startGapMs: m.startGapMs || 0, label },
       memberId: sw.memberId || null, name: sw.name, school: sw.school || OWN_SCHOOL, offsetMs: sw.offsetMs || 0,
       doneReps: reps.length,
       reps: reps.map((r) => ({ repNo: r.repNo, startMs: Math.round(r.startMs), finishMs: Math.round(r.finishMs), timeMs: Math.round(r.timeMs), madeCircle: !!r.madeCircle, restMs: Math.round(r.restMs), dropMs: r.dropMs == null ? null : Math.round(r.dropMs), laps: (r.laps || []).map((x) => Math.round(x)) })),
@@ -2091,6 +2099,7 @@ $("#ps-order").addEventListener("click", (e) => {
 });
 $("#ps-pool").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; trSetup.poolLength = Number(b.dataset.pool); $$("#ps-pool button").forEach((x) => x.classList.toggle("on", x === b)); });
 $("#ps-lap").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; trSetup.lapDistM = Number(b.dataset.lapd); $$("#ps-lap button").forEach((x) => x.classList.toggle("on", x === b)); });
+$("#ps-type").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; trSetup.strokeType = b.dataset.type; $$("#ps-type button").forEach((x) => x.classList.toggle("on", x === b)); });
 $("#btn-ps-begin").addEventListener("click", trBegin);
 $("#btn-pr-start").addEventListener("click", trStart);
 $("#btn-pr-undo").addEventListener("click", trUndo);

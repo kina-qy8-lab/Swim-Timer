@@ -182,7 +182,20 @@
         <span class="spacer"></span>
       </header>
       <p class="lead">レーン内の選手を出発順に追加してください（最大5名）。</p>
-      <label class="field"><span>練習名（任意）</span><input id="ps-name" type="text" placeholder="例：HARD / EASY / DASH" /></label>
+      <label class="field"><span>分類</span>
+        <select id="ps-cat">
+          <option value="">— 分類を選択 —</option>
+          <option value="A">A：リカバリー・フォーム</option>
+          <option value="B">B：有酸素持久力</option>
+          <option value="C">C：レース持久力・閾値</option>
+          <option value="D">D：対乳酸</option>
+          <option value="E">E：スプリント・スピード</option>
+        </select>
+      </label>
+      <label class="field"><span>種類</span>
+        <div class="seg seg3" id="ps-type"><button data-type="Kick">Kick</button><button data-type="Pull">Pull</button><button data-type="Swim" class="on">Swim</button></div>
+      </label>
+      <label class="field"><span>メモ（任意）</span><input id="ps-name" type="text" placeholder="例：HARD / EASY / DASH" /></label>
       <label class="field"><span>選手（出発順に追加）</span>
         <select id="ps-add"><option value="">＋ 選手を追加</option></select>
       </label>
@@ -595,6 +608,6 @@
   <div id="flash" aria-hidden="true"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script type="module" src="./app.js?v=20260623f"></script>
+  <script type="module" src="./app.js?v=20260623g"></script>
 </body>
 </html>
