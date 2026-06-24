@@ -256,7 +256,7 @@ onValue(ref(db, MEMBERS), (s) => {
 });
 onValue(ref(db, RESULTS), (s) => { results = s.val() || {}; if (!$("#screen-records").hidden) renderRecordsAll(); });
 onValue(ref(db, TRAINING), (s) => { training = s.val() || {}; if (!$("#screen-records").hidden && recMode === "practice") renderTraining(); });
-onValue(ref(db, DAILYMENUS), (s) => { dailyMenus = s.val() || {}; if (!$("#screen-menu-builder").hidden) renderMenuBuilder(); });
+onValue(ref(db, DAILYMENUS), (s) => { dailyMenus = s.val() || {}; if (!$("#screen-menu-builder").hidden) renderMenuBuilder(); if (!$("#screen-practice-setup").hidden) psRenderMenuList(); });
 onValue(ref(db, MEETS), (s) => {
   meets = s.val() || {};
   meetsLoaded = true;
@@ -1418,7 +1418,7 @@ function trMenuLabel(menu) {
   return `${menu.distance}m×${menu.reps}　サークル${fmtCircle(menu.circleMs)}${lap}`;
 }
 function trMenuHead(menu) {
-  const tag = [menu.category, menu.strokeType].filter(Boolean).join("・");
+  const tag = [menu.category, menu.strokeType, menu.style].filter(Boolean).join("・");
   const memo = menu.name ? `（${escapeHtml(menu.name)}）` : "";
   return (tag ? escapeHtml(tag) + "　" : "") + trMenuLabel(menu) + memo;
 }
@@ -1474,9 +1474,10 @@ function trLiveState(sw, menu, t) {
 }
 
 // ── 設定画面 ──
+let psMenuDate = null;   // メニュー選択パネルの対象日
 function enterPracticeSetup() {
   role = null; myLane = null; timingMeetId = null;
-  trSetup = { order: [], poolLength: 25, lapDistM: 0, strokeType: "Swim" };
+  trSetup = { order: [], poolLength: 25, lapDistM: 0, strokeType: "Swim", menuRef: null, menuStyle: "" };
   if (!$("#ps-distance").value) $("#ps-distance").value = 100;
   if (!$("#ps-reps").value) $("#ps-reps").value = 10;
   if (!$("#ps-gap").value) $("#ps-gap").value = 5;
@@ -1486,8 +1487,72 @@ function enterPracticeSetup() {
     $("#ps-cmin").value = "1"; $("#ps-csec").value = "30"; $("#ps-cmin").dataset.filled = "1";
   }
   $("#ps-cat").value = "";
+  psMenuDate = todayISO();
+  $("#ps-menu-date").value = psMenuDate;
+  psClearMenuSel(true);
+  psRenderMenuList();
   renderPracticeSetup();
   show("screen-practice-setup");
+}
+
+// メニュー選択パネル：その日の計測対象メニューを一覧
+function psRenderMenuList() {
+  const items = mbItems(psMenuDate).filter((it) => it.measurable);
+  if (!items.length) {
+    $("#ps-menu-list").innerHTML = `<p class="ps-menu-empty">この日の計測対象メニューはありません。下の項目を手入力してください。</p>`;
+    return;
+  }
+  const selId = trSetup && trSetup.menuRef ? trSetup.menuRef.itemId : null;
+  $("#ps-menu-list").innerHTML = items.map((it) => {
+    const sets = it.sets > 1 ? `×${it.sets}set` : "";
+    const tag = [it.category, it.style].filter(Boolean).join("・");
+    const memo = it.note ? `<span class="psm-note">${escapeHtml(it.note)}</span>` : "";
+    return `<button class="ps-menu-item${it.id === selId ? " on" : ""}" data-ps-menu="${it.id}">
+      <span class="psm-main">${escapeHtml(it.type || "")} ${it.distance}m×${it.reps}${sets}</span>
+      <span class="psm-sub">${tag ? escapeHtml(tag) + "・" : ""}ｻｰｸﾙ${fmtHMS(it.circleMs || 0)}</span>${memo}
+    </button>`;
+  }).join("");
+}
+function psSetCircle(ms) {
+  const mn = Math.floor((ms || 0) / 60000), sc = Math.floor(((ms || 0) % 60000) / 1000);
+  if (mn <= 9) $("#ps-cmin").value = String(mn);
+  $("#ps-csec").value = String(sc);
+}
+function psSelectMenuItem(itemId) {
+  const it = mbItems(psMenuDate).find((x) => x.id === itemId);
+  if (!it) return;
+  const prevSet = (trSetup.menuRef && trSetup.menuRef.itemId === itemId) ? trSetup.menuRef.setNo : 1;
+  trSetup.menuRef = { dateISO: psMenuDate, itemId, setNo: Math.min(prevSet || 1, it.sets || 1) };
+  trSetup.menuStyle = it.style || "";
+  trSetup.strokeType = ["Kick", "Pull", "Swim"].includes(it.type) ? it.type : "Swim";
+  $("#ps-cat").value = it.category || "";
+  $("#ps-distance").value = it.distance || "";
+  $("#ps-reps").value = it.reps || "";
+  $("#ps-name").value = it.note || "";
+  psSetCircle(it.circleMs || 0);
+  psRenderSelBanner(it);
+  psRenderMenuList();
+  renderPracticeSetup();
+}
+function psRenderSelBanner(it) {
+  if (!it) { $("#ps-menu-sel").hidden = true; $("#ps-menu-sel").innerHTML = ""; return; }
+  const setNo = trSetup.menuRef ? trSetup.menuRef.setNo : 1;
+  let setPick = "";
+  if ((it.sets || 1) > 1) {
+    const btns = Array.from({ length: it.sets }, (_, i) => i + 1)
+      .map((n) => `<button class="ps-set-btn${n === setNo ? " on" : ""}" data-ps-set="${n}">${n}</button>`).join("");
+    setPick = `<div class="ps-set-pick"><span>計測するセット</span><div class="ps-set-btns">${btns}</div></div>`;
+  }
+  $("#ps-menu-sel").innerHTML =
+    `<div class="ps-sel-row"><span class="ps-sel-txt">選択中：${escapeHtml(it.type || "")} ${it.distance}m×${it.reps}${(it.sets || 1) > 1 ? `（全${it.sets}set）` : ""}</span>` +
+    `<button class="ghost ps-sel-clear" data-ps-menu-clear>解除</button></div>${setPick}`;
+  $("#ps-menu-sel").hidden = false;
+}
+function psClearMenuSel(silent) {
+  if (trSetup) { trSetup.menuRef = null; trSetup.menuStyle = ""; }
+  $("#ps-menu-sel").hidden = true;
+  $("#ps-menu-sel").innerHTML = "";
+  if (!silent) { psRenderMenuList(); renderPracticeSetup(); }
 }
 function trAddSwimmer(id) {
   if (!trSetup || trSetup.order.includes(id)) return;
@@ -1524,7 +1589,7 @@ function trBegin() {
   const category = $("#ps-cat").value || "";
   const strokeType = trSetup.strokeType || "Swim";
   if (!distance || !reps || !circleMs) { alert("距離・本数・サークルを正しく入力してください。"); return; }
-  const menu = { name, category, strokeType, poolLength: trSetup.poolLength, distance, reps, circleMs, lapDistM: trSetup.lapDistM || 0, startGapMs: Math.round(gapSec * 1000) };
+  const menu = { name, category, strokeType, poolLength: trSetup.poolLength, distance, reps, circleMs, lapDistM: trSetup.lapDistM || 0, startGapMs: Math.round(gapSec * 1000), style: trSetup.menuStyle || "", menuRef: trSetup.menuRef || null };
   const swimmers = trSetup.order.map((id, i) => {
     const m = members[id] || {};
     return { memberId: id, name: m.name || "—", school: m.school || OWN_SCHOOL, offsetMs: i * menu.startGapMs, presses: [] };
@@ -1641,7 +1706,8 @@ function trSave() {
     const times = reps.map((r) => r.timeMs);
     const rec = {
       dateISO: tr.dateISO, poolLength: m.poolLength,
-      menu: { name: m.name || "", category: m.category || "", strokeType: m.strokeType || "", distance: m.distance, reps: m.reps, circleMs: m.circleMs, lapDistM: m.lapDistM || 0, startGapMs: m.startGapMs || 0, label },
+      menu: { name: m.name || "", category: m.category || "", strokeType: m.strokeType || "", style: m.style || "", distance: m.distance, reps: m.reps, circleMs: m.circleMs, lapDistM: m.lapDistM || 0, startGapMs: m.startGapMs || 0, label },
+      menuRef: m.menuRef || null,
       memberId: sw.memberId || null, name: sw.name, school: sw.school || OWN_SCHOOL, offsetMs: sw.offsetMs || 0,
       doneReps: reps.length,
       reps: reps.map((r) => ({ repNo: r.repNo, startMs: Math.round(r.startMs), finishMs: Math.round(r.finishMs), timeMs: Math.round(r.timeMs), madeCircle: !!r.madeCircle, restMs: Math.round(r.restMs), dropMs: r.dropMs == null ? null : Math.round(r.dropMs), laps: (r.laps || []).map((x) => Math.round(x)) })),
@@ -2395,6 +2461,18 @@ $("#ps-pool").addEventListener("click", (e) => { const b = e.target.closest("but
 $("#ps-lap").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; trSetup.lapDistM = Number(b.dataset.lapd); $$("#ps-lap button").forEach((x) => x.classList.toggle("on", x === b)); });
 $("#ps-type").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; trSetup.strokeType = b.dataset.type; $$("#ps-type button").forEach((x) => x.classList.toggle("on", x === b)); });
 $("#btn-ps-begin").addEventListener("click", trBegin);
+// 練習：メニューから選ぶ
+$("#ps-menu-date").addEventListener("change", (e) => { psMenuDate = e.target.value || todayISO(); psClearMenuSel(); });
+$("#ps-menu-list").addEventListener("click", (e) => { const b = e.target.closest("[data-ps-menu]"); if (!b) return; psSelectMenuItem(b.dataset.psMenu); });
+$("#ps-menu-sel").addEventListener("click", (e) => {
+  if (e.target.closest("[data-ps-menu-clear]")) { psClearMenuSel(); return; }
+  const s = e.target.closest("[data-ps-set]");
+  if (s && trSetup && trSetup.menuRef) {
+    trSetup.menuRef.setNo = Number(s.dataset.psSet);
+    const it = mbItems(psMenuDate).find((x) => x.id === trSetup.menuRef.itemId);
+    psRenderSelBanner(it);
+  }
+});
 $("#btn-pr-start").addEventListener("click", trStart);
 $("#btn-pr-undo").addEventListener("click", trUndo);
 $("#btn-pr-end").addEventListener("click", trEnd);

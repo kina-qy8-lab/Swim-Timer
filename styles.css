@@ -634,3 +634,25 @@ button { font-family: inherit; }
 .mb-form-btns { display: flex; gap: 10px; }
 .mb-form-btns .ghost { flex: 0 0 auto; }
 .mb-form-btns .big { flex: 1; margin: 0; }
+
+/* ── 練習計測：メニューから選ぶ ───────────────────────── */
+.ps-menu-pick { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); padding: 12px; margin-bottom: 14px; }
+.ps-menu-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.ps-menu-ttl { font-weight: 700; color: var(--blue-deep); }
+.ps-menu-date { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font-size: 15px; color: var(--ink); background: var(--bg); }
+.ps-menu-list { display: flex; flex-direction: column; gap: 8px; }
+.ps-menu-empty { color: var(--muted); font-size: 14px; margin: 2px 0; }
+.ps-menu-item { text-align: left; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
+.ps-menu-item.on { border-color: var(--blue); background: var(--blue-soft); box-shadow: 0 0 0 1px var(--blue) inset; }
+.ps-menu-item .psm-main { font-weight: 700; color: var(--ink); font-size: 15px; }
+.ps-menu-item .psm-sub { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.ps-menu-item .psm-note { color: var(--blue-deep); font-size: 12px; }
+.ps-menu-sel { background: var(--blue-soft); border: 1px solid var(--blue); border-radius: 12px; padding: 10px 12px; margin-bottom: 14px; }
+.ps-sel-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.ps-sel-txt { font-weight: 700; color: var(--blue-deep); font-size: 14px; }
+.ps-sel-clear { padding: 6px 12px; font-size: 14px; flex: 0 0 auto; }
+.ps-set-pick { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.ps-set-pick > span { color: var(--muted); font-size: 13px; }
+.ps-set-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+.ps-set-btn { min-width: 38px; height: 38px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 10px; font-size: 16px; font-weight: 700; cursor: pointer; }
+.ps-set-btn.on { background: var(--blue); color: #fff; border-color: var(--blue); }

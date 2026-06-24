@@ -183,6 +183,14 @@
         <span class="spacer"></span>
       </header>
       <p class="lead">レーン内の選手を出発順に追加してください（最大5名）。</p>
+      <div class="ps-menu-pick">
+        <div class="ps-menu-head">
+          <span class="ps-menu-ttl">📋 メニューから選ぶ</span>
+          <input id="ps-menu-date" type="date" class="ps-menu-date" />
+        </div>
+        <div id="ps-menu-list" class="ps-menu-list"></div>
+      </div>
+      <div id="ps-menu-sel" class="ps-menu-sel" hidden></div>
       <label class="field"><span>分類</span>
         <select id="ps-cat">
           <option value="">— 分類を選択 —</option>
@@ -682,6 +690,6 @@
   <div id="flash" aria-hidden="true"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script type="module" src="./app.js?v=20260624a"></script>
+  <script type="module" src="./app.js?v=20260624b"></script>
 </body>
 </html>
