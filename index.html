@@ -31,6 +31,7 @@
       <button class="big start" id="btn-practice">🏊 練習を計測する</button>
       <button class="big blue meetpub-btn" id="btn-meetpub">🏁 記録会のエントリー・結果</button>
       <div class="util-row">
+        <button class="ghost" data-go="menu">📝 練習メニュー作成</button>
         <button class="ghost" data-go="meets">🏁 記録会の管理</button>
         <button class="ghost" data-go="members">👥 メンバー登録</button>
         <button class="ghost" data-go="records">📋 記録を見る</button>
@@ -253,6 +254,57 @@
       <div class="row2">
         <button id="btn-prv-discard" class="big ghost">破棄する</button>
         <button id="btn-prv-save" class="big blue">保存する</button>
+      </div>
+    </section>
+
+    <!-- 練習メニュー作成 -->
+    <section id="screen-menu-builder" class="screen" hidden>
+      <header class="bar">
+        <button class="ghost back" id="mb-back">← 戻る</button>
+        <span class="bar-title">練習メニュー作成</span>
+        <span class="spacer"></span>
+      </header>
+      <p class="lead">日付ごとに1日のメニュー表を作成します。合計時間・距離は自動計算されます。</p>
+      <label class="field"><span>日付</span><input id="mb-date" type="date" /></label>
+
+      <div class="mb-table-wrap">
+        <table class="mb-table" id="mb-table"></table>
+      </div>
+      <div class="mb-total" id="mb-total"></div>
+
+      <button class="big blue" id="mb-add">＋ メニューを追加</button>
+
+      <!-- 行 追加／編集フォーム -->
+      <div class="mb-form" id="mb-form" hidden>
+        <div class="sec-title" id="mb-form-title">メニューを追加</div>
+        <div class="frow">
+          <label class="field"><span>区分（強度・任意）</span>
+            <select id="mb-cat"></select>
+          </label>
+          <label class="field"><span>分類</span>
+            <select id="mb-type"></select>
+          </label>
+        </div>
+        <div class="frow">
+          <label class="field"><span>距離(m/本)</span><input id="mb-dist" type="number" inputmode="numeric" min="0" step="25" /></label>
+          <label class="field"><span>本数</span><input id="mb-reps" type="number" inputmode="numeric" min="1" step="1" /></label>
+          <label class="field"><span>セット</span><input id="mb-sets" type="number" inputmode="numeric" min="1" step="1" value="1" /></label>
+        </div>
+        <div class="frow">
+          <label class="field"><span>スタイル</span><select id="mb-style"></select></label>
+          <label class="field"><span>サークル（分・秒）</span>
+            <div class="circle-pick">
+              <select id="mb-cmin"></select><span class="cu">分</span>
+              <select id="mb-csec"></select><span class="cu">秒</span>
+            </div>
+          </label>
+        </div>
+        <label class="field"><span>詳細（メモ）</span><input id="mb-note" type="text" placeholder="例：DPS / 4H1E / All Dive Max" /></label>
+        <label class="mb-check"><input type="checkbox" id="mb-meas" /> このメニューを計測する</label>
+        <div class="mb-form-btns">
+          <button class="ghost" id="mb-cancel">キャンセル</button>
+          <button class="big blue" id="mb-commit">この行を追加</button>
+        </div>
       </div>
     </section>
 
@@ -625,6 +677,6 @@
   <div id="flash" aria-hidden="true"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script type="module" src="./app.js?v=20260623i"></script>
+  <script type="module" src="./app.js?v=20260624a"></script>
 </body>
 </html>
