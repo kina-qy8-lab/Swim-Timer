@@ -140,11 +140,12 @@ function fmtClock(epochMs) {
   const p = (n) => String(n).padStart(2, "0");
   return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.${cc}`;
 }
-// メニュー表用：H:MM:SS（参考表の 0:08:00 形式）
+// メニュー表用：先頭の0時を省いて詰める（8:00 / 22:30 / 1:05:00）
 function fmtHMS(ms) {
   let sec = Math.max(0, Math.round((ms || 0) / 1000));
   const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
-  return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
+              : `${m}:${String(s).padStart(2, "0")}`;
 }
 
 // ── ラップ自動計算エンジン ──────────────────────────────
@@ -1294,11 +1295,12 @@ function enterMenuBuilder() {
 function renderMenuBuilder() {
   const items = mbItems(mbDate);
   const head = `<thead><tr>
-    <th>区分</th><th>分類</th><th>距離</th><th>本</th><th>ｾｯﾄ</th><th>ｽﾀｲﾙ</th>
-    <th>ｻｰｸﾙ</th><th>合計時間</th><th>合計距離</th><th class="mb-note-h">詳細</th><th></th>
+    <th>区分</th><th>分類</th><th>距離</th><th>本</th><th>ｾｯﾄ</th>
+    <th class="mb-note-h">詳細</th><th>ｽﾀｲﾙ</th><th>ｻｰｸﾙ</th>
+    <th>合計<br>時間</th><th>合計<br>距離</th>
   </tr></thead>`;
   let totT = 0, totD = 0;
-  const rows = items.map((it, i) => {
+  const rows = items.map((it) => {
     const t = mbItemTime(it), d = mbItemDist(it); totT += t; totD += d;
     const cat = it.category ? `<span class="mb-cat cat-${it.category}">${it.category}</span>` : "—";
     const noMeas = it.measurable ? "" : `<span class="mb-nomeas">記録外</span>`;
@@ -1306,18 +1308,13 @@ function renderMenuBuilder() {
       <td>${cat}</td>
       <td class="mb-type">${escapeHtml(it.type || "")}${noMeas}</td>
       <td>${it.distance || 0}</td><td>${it.reps || 0}</td><td>${it.sets || 1}</td>
+      <td class="mb-note">${escapeHtml(it.note || "")}</td>
       <td>${escapeHtml(it.style || "—")}</td>
       <td>${it.circleMs ? fmtHMS(it.circleMs) : "—"}</td>
       <td><b>${fmtHMS(t)}</b></td><td><b>${d}</b></td>
-      <td class="mb-note">${escapeHtml(it.note || "")}</td>
-      <td class="mb-ops">
-        <button class="ps-mini" data-mb-up="${it.id}" ${i === 0 ? "disabled" : ""}>↑</button>
-        <button class="ps-mini" data-mb-dn="${it.id}" ${i === items.length - 1 ? "disabled" : ""}>↓</button>
-        <button class="ps-mini" data-mb-edit="${it.id}">✎</button>
-        <button class="ps-mini rm" data-mb-del="${it.id}">✕</button>
-      </td></tr>`;
+    </tr>`;
   }).join("");
-  const body = rows || `<tr><td colspan="11" class="mb-empty">まだメニューがありません。「＋ メニューを追加」で作成してください。</td></tr>`;
+  const body = rows || `<tr><td colspan="10" class="mb-empty">まだメニューがありません。「＋ メニューを追加」で作成してください。</td></tr>`;
   $("#mb-table").innerHTML = head + `<tbody>${body}</tbody>`;
   $("#mb-total").innerHTML = items.length
     ? `<span class="mb-total-lbl">1日合計</span><span class="mb-total-t">時間 <b>${fmtHMS(totT)}</b></span><span class="mb-total-d">距離 <b>${totD.toLocaleString()}</b>m</span>`
@@ -1341,6 +1338,7 @@ function mbOpenForm(id) {
   $("#mb-csec").value = String(Math.floor((cms % 60000) / 1000));
   $("#mb-note").value = (it && it.note) || "";
   $("#mb-meas").checked = it ? !!it.measurable : !MENU_NOMEAS.includes($("#mb-type").value);
+  $("#mb-manage").hidden = !id;
   $("#mb-form").hidden = false;
   $("#mb-add").hidden = true;
   $("#mb-form").scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -2423,11 +2421,12 @@ $("#mb-cancel").addEventListener("click", mbCloseForm);
 $("#mb-commit").addEventListener("click", mbCommit);
 $("#mb-type").addEventListener("change", () => { $("#mb-meas").checked = !MENU_NOMEAS.includes($("#mb-type").value); });
 $("#mb-table").addEventListener("click", (e) => {
-  const up = e.target.closest("[data-mb-up]"); if (up) { mbMoveItem(up.dataset.mbUp, -1); return; }
-  const dn = e.target.closest("[data-mb-dn]"); if (dn) { mbMoveItem(dn.dataset.mbDn, 1); return; }
-  const ed = e.target.closest("[data-mb-edit]"); if (ed) { mbOpenForm(ed.dataset.mbEdit); return; }
-  const dl = e.target.closest("[data-mb-del]"); if (dl) { mbDeleteItem(dl.dataset.mbDel); return; }
+  const row = e.target.closest("[data-mb-row]"); if (!row) return;
+  mbOpenForm(row.dataset.mbRow);
 });
+$("#mb-mv-up").addEventListener("click", () => { if (mbEditingId) mbMoveItem(mbEditingId, -1); });
+$("#mb-mv-dn").addEventListener("click", () => { if (mbEditingId) mbMoveItem(mbEditingId, 1); });
+$("#mb-del").addEventListener("click", () => { if (mbEditingId) mbDeleteItem(mbEditingId); });
 
 show("screen-role");
 

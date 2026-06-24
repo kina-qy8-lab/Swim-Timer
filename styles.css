@@ -593,21 +593,34 @@ button { font-family: inherit; }
 .tr-stat b i { font-size: 11px; color: var(--muted); font-style: normal; font-weight: 400; }
 
 /* ── 練習メニュー作成（自動計算表） ───────────────────── */
-.mb-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
-.mb-table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 13px; font-variant-numeric: tabular-nums; }
-.mb-table th, .mb-table td { padding: 7px 8px; text-align: center; border-bottom: 1px solid var(--line); white-space: nowrap; }
-.mb-table thead th { background: var(--blue-soft); color: var(--blue-deep); font-size: 12px; font-weight: 700; position: sticky; top: 0; }
+/* 横スクロールせず1画面に収める。詳細列で幅を吸収し、数値列は詰める。 */
+.mb-table-wrap { overflow-x: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.mb-table { border-collapse: collapse; width: 100%; table-layout: fixed; font-size: 11.5px; font-variant-numeric: tabular-nums; line-height: 1.25; }
+.mb-table th, .mb-table td { padding: 5px 2px; text-align: center; border-bottom: 1px solid var(--line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mb-table thead th { background: var(--blue-soft); color: var(--blue-deep); font-size: 10.5px; font-weight: 700; }
+.mb-table tbody tr { cursor: pointer; }
+.mb-table tbody tr:active { background: var(--blue-soft); }
 .mb-table tbody tr:last-child td { border-bottom: none; }
 .mb-table td b { color: var(--ink); }
 .mb-table .mb-type { font-weight: 700; color: var(--blue-deep); }
-.mb-table .mb-note-h, .mb-table .mb-note { text-align: left; max-width: 180px; white-space: normal; word-break: break-word; color: var(--muted); }
-.mb-cat { display: inline-block; min-width: 20px; font-size: 11px; font-weight: 800; color: #fff; border-radius: 6px; padding: 2px 6px; }
+.mb-table .mb-note-h, .mb-table .mb-note { text-align: left; white-space: normal; word-break: break-word; color: var(--muted); }
+/* 列幅：詳細(6列目)を可変、他は内容に合わせて狭く固定 */
+.mb-table col { }
+.mb-table th:nth-child(1), .mb-table td:nth-child(1) { width: 30px; }
+.mb-table th:nth-child(2), .mb-table td:nth-child(2) { width: 38px; }
+.mb-table th:nth-child(3), .mb-table td:nth-child(3) { width: 30px; }
+.mb-table th:nth-child(4), .mb-table td:nth-child(4) { width: 22px; }
+.mb-table th:nth-child(5), .mb-table td:nth-child(5) { width: 26px; }
+.mb-table th:nth-child(6), .mb-table td:nth-child(6) { width: auto; }
+.mb-table th:nth-child(7), .mb-table td:nth-child(7) { width: 30px; }
+.mb-table th:nth-child(8), .mb-table td:nth-child(8) { width: 36px; }
+.mb-table th:nth-child(9), .mb-table td:nth-child(9) { width: 40px; }
+.mb-table th:nth-child(10), .mb-table td:nth-child(10) { width: 34px; }
+.mb-cat { display: inline-block; min-width: 16px; font-size: 10px; font-weight: 800; color: #fff; border-radius: 5px; padding: 1px 4px; }
 .mb-cat.cat-A { background: #22a06b; } .mb-cat.cat-B { background: #1577dd; } .mb-cat.cat-C { background: #0e7490; }
 .mb-cat.cat-D { background: #e0a800; } .mb-cat.cat-E { background: #d7263d; }
-.mb-nomeas { display: block; font-size: 10px; color: var(--muted); font-weight: 400; margin-top: 2px; }
-.mb-empty { color: var(--muted); padding: 22px 8px; text-align: center; }
-.mb-ops { display: flex; gap: 4px; justify-content: center; }
-.mb-ops .ps-mini { min-width: 30px; height: 30px; font-size: 14px; padding: 0; }
+.mb-nomeas { display: block; font-size: 9px; color: var(--muted); font-weight: 400; }
+.mb-empty { color: var(--muted); padding: 22px 8px; text-align: center; white-space: normal; }
 .mb-total { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 12px 2px 16px; padding: 10px 14px; background: var(--blue-soft); border-radius: 12px; font-variant-numeric: tabular-nums; }
 .mb-total:empty { display: none; }
 .mb-total-lbl { font-weight: 800; color: var(--blue-deep); }
@@ -615,6 +628,9 @@ button { font-family: inherit; }
 .mb-form { margin-top: 16px; padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
 .mb-check { display: flex; align-items: center; gap: 8px; margin: 4px 0 14px; color: var(--ink); font-size: 15px; cursor: pointer; }
 .mb-check input { width: 20px; height: 20px; }
+.mb-manage { display: flex; gap: 8px; margin-bottom: 12px; }
+.mb-manage .ghost { flex: 1; padding: 10px 6px; }
+.mb-manage .ghost.danger { color: var(--red); border-color: var(--red); }
 .mb-form-btns { display: flex; gap: 10px; }
 .mb-form-btns .ghost { flex: 0 0 auto; }
 .mb-form-btns .big { flex: 1; margin: 0; }

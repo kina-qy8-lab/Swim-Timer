@@ -264,7 +264,7 @@
         <span class="bar-title">練習メニュー作成</span>
         <span class="spacer"></span>
       </header>
-      <p class="lead">日付ごとに1日のメニュー表を作成します。合計時間・距離は自動計算されます。</p>
+      <p class="lead">日付ごとに1日のメニュー表を作成します。合計は自動計算。行をタップすると編集・並べ替え・削除ができます。</p>
       <label class="field"><span>日付</span><input id="mb-date" type="date" /></label>
 
       <div class="mb-table-wrap">
@@ -301,6 +301,11 @@
         </div>
         <label class="field"><span>詳細（メモ）</span><input id="mb-note" type="text" placeholder="例：DPS / 4H1E / All Dive Max" /></label>
         <label class="mb-check"><input type="checkbox" id="mb-meas" /> このメニューを計測する</label>
+        <div class="mb-manage" id="mb-manage" hidden>
+          <button class="ghost" id="mb-mv-up">↑ 上へ</button>
+          <button class="ghost" id="mb-mv-dn">↓ 下へ</button>
+          <button class="ghost danger" id="mb-del">削除</button>
+        </div>
         <div class="mb-form-btns">
           <button class="ghost" id="mb-cancel">キャンセル</button>
           <button class="big blue" id="mb-commit">この行を追加</button>
