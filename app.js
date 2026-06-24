@@ -68,7 +68,7 @@ let manualKind = "indiv";
 let chProgress = null, chOverlay = null, chLap = null, chShape = null, chDeficit = null;
 let chTrRep = null, chTrTrend = null, chTrSeg = null;
 let training = {};
-let trFilter = "", trDate = "", trMenuId = null;
+let trFilter = "", trDate = "", trMenuId = null, trCalYM = null;
 let viewPassHash = null;
 let ending = false;
 let joinedRaceId = null;
@@ -1520,6 +1520,36 @@ function trCatTag(m) {
 }
 function trDestroyCharts() { chTrRep?.destroy(); chTrTrend?.destroy(); chTrSeg?.destroy(); chTrRep = chTrTrend = chTrSeg = null; }
 
+function renderTrCalendar(dates) {
+  if (!trCalYM) return;
+  const set = new Set(dates);
+  const { y, m } = trCalYM;
+  const startDow = new Date(y, m - 1, 1).getDay();
+  const daysInMonth = new Date(y, m, 0).getDate();
+  const cells = [];
+  for (let i = 0; i < startDow; i++) cells.push(`<div class="tc-cell empty"></div>`);
+  for (let d = 1; d <= daysInMonth; d++) {
+    const iso = `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    const has = set.has(iso), sel = iso === trDate;
+    cells.push(`<div class="tc-cell${has ? " has" : ""}${sel ? " sel" : ""}"${has ? ` data-tr-date="${iso}"` : ""}><span>${d}</span></div>`);
+  }
+  $("#tr-dates").innerHTML = `
+    <div class="tc-head">
+      <button class="tc-nav" data-tc-nav="-1">◀</button>
+      <span class="tc-title">${y}年${m}月</span>
+      <button class="tc-nav" data-tc-nav="1">▶</button>
+    </div>
+    <div class="tc-grid tc-dow"><span>日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span>土</span></div>
+    <div class="tc-grid">${cells.join("")}</div>`;
+}
+function trCalShift(delta) {
+  if (!trCalYM) return;
+  let { y, m } = trCalYM; m += delta;
+  if (m < 1) { m = 12; y--; } else if (m > 12) { m = 1; y++; }
+  trCalYM = { y, m };
+  renderTrCalendar([...new Set(trainingList(trFilter).map((r) => r.dateISO))]);
+}
+
 function renderTraining() {
   const sel = $("#tr-filter"); if (!sel) return;
   const list = memberList().filter((m) => (m.school || OWN_SCHOOL) === OWN_SCHOOL && (!m.retired || m.id === trFilter));
@@ -1528,9 +1558,11 @@ function renderTraining() {
   if (!trFilter) { trDestroyCharts(); return; }
   const recs = trainingList(trFilter);
   const dates = [...new Set(recs.map((r) => r.dateISO))].sort((a, b) => (b || "").localeCompare(a || ""));
-  $("#tr-dates").innerHTML = dates.length
-    ? dates.map((d) => `<button class="tr-date${d === trDate ? " on" : ""}" data-tr-date="${d}">${trDateLabel(d)}</button>`).join("")
-    : `<p class="empty">この選手の練習記録はまだありません。</p>`;
+  if (!dates.length) { $("#tr-dates").innerHTML = `<p class="empty">この選手の練習記録はまだありません。</p>`; }
+  else {
+    if (!trCalYM) { const p = (trDate || dates[0]).split("-").map(Number); trCalYM = { y: p[0], m: p[1] }; }
+    renderTrCalendar(dates);
+  }
   if (trDate && dates.includes(trDate)) {
     $("#tr-menus-wrap").hidden = false;
     $("#tr-date-label").textContent = trDateLabel(trDate) + " のメニュー（タップで分析）";
@@ -2222,8 +2254,12 @@ $("#btn-prv-discard").addEventListener("click", trDiscard);
 $("#prv-back").addEventListener("click", () => { show("screen-practice-run"); });
 
 // 練習分析
-$("#tr-filter").addEventListener("change", (e) => { trFilter = e.target.value; trDate = ""; trMenuId = null; renderTraining(); });
-$("#tr-dates").addEventListener("click", (e) => { const b = e.target.closest("[data-tr-date]"); if (!b) return; trDate = b.dataset.trDate; trMenuId = null; renderTraining(); });
+$("#tr-filter").addEventListener("change", (e) => { trFilter = e.target.value; trDate = ""; trMenuId = null; trCalYM = null; renderTraining(); });
+$("#tr-dates").addEventListener("click", (e) => {
+  const nav = e.target.closest("[data-tc-nav]"); if (nav) { trCalShift(Number(nav.dataset.tcNav)); return; }
+  const b = e.target.closest("[data-tr-date]"); if (!b) return;
+  trDate = b.dataset.trDate; trMenuId = null; renderTraining();
+});
 $("#tr-menus").addEventListener("click", (e) => { const b = e.target.closest("[data-tr-menu]"); if (!b) return; trMenuId = (trMenuId === b.dataset.trMenu) ? null : b.dataset.trMenu; renderTraining(); });
 
 show("screen-role");
