@@ -76,7 +76,7 @@ let mbDate = null;            // メニュー作成画面の対象日
 let mbEditingId = null;       // 編集中の行ID（新規は null）
 let mbFilled = false;         // サークルselectの初期化済みフラグ
 let chProgress = null, chOverlay = null, chLap = null, chShape = null, chDeficit = null;
-let chTrRep = null, chTrTrend = null, chTrSeg = null;
+let chTrRep = null, chTrTrend = null, chTrSeg = null, chTrSetRep = null, chTrSetAvg = null;
 let training = {};
 let trFilter = "", trDate = "", trMenuId = null, trCalYM = null;
 let viewPassHash = null;
@@ -1695,12 +1695,23 @@ function renderPracticeRun() {
     const lapInRep = pressDone % lpr;
     const nowLabel = done ? "完了" : `${curRep}本目` + (lpr > 1 ? `　ラップ ${Math.min(lapInRep + 1, lpr)}/${lpr}` : "");
     // 履歴（新しい順・上から。入りきらない古い記録は下で見えなくなる）
-    const hist = reps.slice().reverse().map((r) => {
+    const histDone = reps.slice().reverse().map((r) => {
       const dr = r.dropMs == null ? "" : `<span class="ph-dr ${r.dropMs > 0 ? "pr-up" : "pr-down"}">${fmtDrop(r.dropMs)}</span>`;
       const ci = r.madeCircle ? `<span class="ph-ci ok">◯${fmtCd(r.restMs)}</span>` : `<span class="ph-ci late">×遅</span>`;
       const laps = lpr > 1 ? `<div class="ph-laps">${trSegHtml(r)}</div>` : "";
       return `<div class="ph-row${r.madeCircle ? "" : " late"}"><div class="ph-line"><span class="ph-no">${r.repNo}</span><span class="ph-tm">${fmt(r.timeMs)}</span>${dr}${ci}</div>${laps}</div>`;
     }).join("");
+    // 計測中の本：ラップを取った時点で即反映（最上段）
+    let histLive = "";
+    if (lpr > 1 && lapInRep > 0 && !done) {
+      const off = sw.offsetMs || 0, C = tr.menu.circleMs;
+      const S = (curRep === 1) ? off : Math.max(off + (curRep - 1) * C, (sw.presses || [])[(curRep - 1) * lpr - 1]);
+      const startIdx = (curRep - 1) * lpr;
+      const cum = [];
+      for (let j = 0; j < lapInRep; j++) cum.push((sw.presses || [])[startIdx + j] - S);
+      histLive = `<div class="ph-row inprog"><div class="ph-line"><span class="ph-no">${curRep}</span><span class="ph-tm live">計測中</span><span class="ph-ci">ﾗｯﾌﾟ ${lapInRep}/${lpr}</span></div><div class="ph-laps">${trSegHtml({ laps: cum })}</div></div>`;
+    }
+    const hist = histLive + histDone;
     return `<div class="pr-card${done ? " done" : ""}" data-pr-si="${si}">
       <div class="pr-btn">
         <div class="pr-top"><span class="pr-name">${escapeHtml(sw.name)}</span><span class="pr-rem">${done ? "完了" : "残り " + remaining + "本"}</span></div>
@@ -1817,7 +1828,7 @@ function trCatTag(m) {
   const t = m.strokeType ? `<span class="tr-tag type">${escapeHtml(m.strokeType)}</span>` : "";
   return c + t;
 }
-function trDestroyCharts() { chTrRep?.destroy(); chTrTrend?.destroy(); chTrSeg?.destroy(); chTrRep = chTrTrend = chTrSeg = null; }
+function trDestroyCharts() { chTrRep?.destroy(); chTrTrend?.destroy(); chTrSeg?.destroy(); chTrSetRep?.destroy(); chTrSetAvg?.destroy(); chTrRep = chTrTrend = chTrSeg = chTrSetRep = chTrSetAvg = null; }
 
 function renderTrCalendar(dates) {
   if (!trCalYM) return;
@@ -1866,12 +1877,39 @@ function renderTraining() {
     $("#tr-menus-wrap").hidden = false;
     $("#tr-date-label").textContent = trDateLabel(trDate) + " のメニュー（タップで分析）";
     const day = recs.filter((r) => r.dateISO === trDate).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
-    $("#tr-menus").innerHTML = day.map((r) => `<div class="tr-menu${r.id === trMenuId ? " on" : ""}" data-tr-menu="${r.id}"><div class="tm-top">${trCatTag(r.menu)}<span class="tm-avg">平均 ${fmt(r.avgMs)}・${r.doneReps}本</span></div><div class="tm-label">${escapeHtml(r.menu.label || "")}${r.menu.name ? `　<i>${escapeHtml(r.menu.name)}</i>` : ""}</div></div>`).join("");
-  } else { $("#tr-menus-wrap").hidden = true; trDate = trDate && dates.includes(trDate) ? trDate : ""; }
-  if (trMenuId && training[trMenuId] && training[trMenuId].memberId === trFilter) {
-    $("#tr-detail").hidden = false;
-    renderTrainingDetail({ id: trMenuId, ...training[trMenuId] });
-  } else { trMenuId = null; $("#tr-detail").hidden = true; $("#tr-detail").innerHTML = ""; trDestroyCharts(); }
+    const groups = trDayGroups(day);
+    $("#tr-menus").innerHTML = groups.map((g) => trGroupCard(g)).join("");
+    const cur = trMenuId ? groups.find((g) => g.key === trMenuId) : null;
+    if (cur) { $("#tr-detail").hidden = false; renderTrainingGroup(cur.recs); }
+    else { trMenuId = null; $("#tr-detail").hidden = true; $("#tr-detail").innerHTML = ""; trDestroyCharts(); }
+  } else {
+    $("#tr-menus-wrap").hidden = true;
+    trDate = trDate && dates.includes(trDate) ? trDate : "";
+    trMenuId = null; $("#tr-detail").hidden = true; $("#tr-detail").innerHTML = ""; trDestroyCharts();
+  }
+}
+
+// 同じメニュー（=同じ itemId）のセットをまとめる
+function trGroupKey(r) { return (r.menuRef && r.menuRef.itemId) ? ("item:" + r.menuRef.itemId) : ("rec:" + r.id); }
+function trDayGroups(dayRecs) {
+  const map = new Map();
+  dayRecs.forEach((r) => { const k = trGroupKey(r); if (!map.has(k)) map.set(k, []); map.get(k).push(r); });
+  return [...map.entries()].map(([key, recs]) => {
+    recs.sort((a, b) => (a.setNo || 1) - (b.setNo || 1) || (a.createdAt || 0) - (b.createdAt || 0));
+    return { key, recs };
+  });
+}
+function trGroupCard(g) {
+  const recs = g.recs, m = recs[0].menu, n = recs.length;
+  const avgAll = Math.round(recs.reduce((a, r) => a + (r.avgMs || 0), 0) / n);
+  const totalReps = recs.reduce((a, r) => a + (r.doneReps || 0), 0);
+  const setBadge = n > 1 ? `<span class="tm-sets">${n}セット</span>` : "";
+  const right = n > 1 ? `平均 ${fmt(avgAll)}・${n}セット` : `平均 ${fmt(avgAll)}・${totalReps}本`;
+  return `<div class="tr-menu${g.key === trMenuId ? " on" : ""}" data-tr-menu="${g.key}"><div class="tm-top">${trCatTag(m)}${setBadge}<span class="tm-avg">${right}</span></div><div class="tm-label">${escapeHtml(m.label || "")}${m.name ? `　<i>${escapeHtml(m.name)}</i>` : ""}</div></div>`;
+}
+function renderTrainingGroup(recs) {
+  if (recs.length <= 1) { renderTrainingDetail(recs[0]); return; }
+  renderTrainingMultiSet(recs);
 }
 
 function renderTrainingDetail(r) {
@@ -1941,6 +1979,62 @@ function trDrawSegChart(reps, lpr) {
   reps.forEach((r) => trSegTimes(r).forEach((s, j) => { if (j < lpr) { sums[j] += s; cnt[j]++; } }));
   const avg = sums.map((s, j) => cnt[j] ? +(s / cnt[j] / 1000).toFixed(2) : null);
   chTrSeg = new Chart($("#tr-chart-seg"), { type: "line", data: { labels: avg.map((_, j) => `区間${j + 1}`), datasets: [{ label: "位置別平均(秒)", data: avg, borderColor: "#9b59b6", backgroundColor: "#9b59b622", tension: 0.2, pointRadius: 5, fill: true }] }, options: chartOpts("秒（小さいほど速い）") });
+}
+
+// ── 複数セットの詳細（セット毎の変化） ──
+const TR_SET_PALETTE = ["#1577dd", "#22a06b", "#e0a800", "#9b59b6", "#d7263d", "#0e7490"];
+function renderTrainingMultiSet(recs) {
+  trDestroyCharts();
+  const m = recs[0].menu, lpr = trLapsPerRep(m);
+  const head = (m.category ? (TR_CAT_LABEL[m.category] ? `${m.category}：${TR_CAT_LABEL[m.category]}` : m.category) : "") + (m.strokeType ? ` ・ ${m.strokeType}` : "");
+  const setAvgs = recs.map((r) => r.avgMs || 0);
+  const bestSet = recs[setAvgs.indexOf(Math.min(...setAvgs))];
+  const setStats = recs.map((r, i) => `<div class="tr-stat"><span>第${r.setNo || i + 1}セット</span><b>${fmt(r.avgMs)}</b></div>`).join("");
+  const drift = setAvgs.length > 1 ? setAvgs[setAvgs.length - 1] - setAvgs[0] : 0;
+  let driftNote;
+  if (Math.abs(drift) < 100) driftNote = "セットを通してほぼ一定のペースを保てています。";
+  else if (drift > 0) driftNote = `最終セットは初めのセットより平均 +${fmt(drift)} 落ちています。`;
+  else driftNote = `最終セットの方が平均 ${fmt(Math.abs(drift))} 速い、よく粘れています。`;
+  const blocks = recs.map((r, i) => {
+    const reps = r.reps || [];
+    const rows = reps.map((x) => {
+      let row = `<div class="prv-row${x.madeCircle ? "" : " late"}"><span class="i">${x.repNo}</span><span class="tm">${fmt(x.timeMs)}</span><span class="dr">${fmtDrop(x.dropMs)}</span><span class="ci">${x.madeCircle ? "◯ 余裕" + fmtCd(x.restMs) + "s" : "× 遅れ"}</span></div>`;
+      if (lpr > 1) row += `<div class="prv-laps">${trSegHtml(x)}</div>`;
+      return row;
+    }).join("");
+    return `<div class="prv-sw"><div class="prv-h"><b>第${r.setNo || i + 1}セット</b><span>平均 ${fmt(r.avgMs)}・${reps.length}本</span></div><div class="prv-cap"><span>本</span><span>タイム</span><span>落ち幅</span><span>サークル</span></div>${rows}</div>`;
+  }).join("");
+  $("#tr-detail").innerHTML = `
+    <div class="tr-d-head">${head ? `<b>${escapeHtml(head)}</b>` : ""}<span>${escapeHtml(m.label || "")}${m.name ? `・${escapeHtml(m.name)}` : ""}　/　${recs.length}セット</span></div>
+    <div class="tr-stats tr-setstats">${setStats}</div>
+    <div class="sec-title">セット平均の推移</div>
+    <div class="chart-wrap"><canvas id="tr-chart-setavg"></canvas></div>
+    <p class="hint">${driftNote} 最速は第${bestSet.setNo || (recs.indexOf(bestSet) + 1)}セット。</p>
+    <div class="sec-title">セットごとの本数比較</div>
+    <div class="chart-wrap"><canvas id="tr-chart-setrep"></canvas></div>
+    <p class="hint">各セットの本数ごとのタイムを重ねて比較。オレンジ破線はサークルです。</p>
+    <div class="sec-title">セット別の記録</div>
+    ${blocks}`;
+  trDrawSetAvgChart(recs);
+  trDrawSetRepChart(recs, m);
+}
+function trDrawSetAvgChart(recs) {
+  if (!window.Chart) return;
+  const labels = recs.map((r, i) => `第${r.setNo || i + 1}`);
+  chTrSetAvg = new Chart($("#tr-chart-setavg"), { type: "line", data: { labels, datasets: [{ label: "セット平均(秒)", data: recs.map((r) => +((r.avgMs || 0) / 1000).toFixed(2)), borderColor: "#22a06b", backgroundColor: "#22a06b22", tension: 0.2, pointRadius: 6, fill: true }] }, options: chartOpts("秒（小さいほど速い）") });
+}
+function trDrawSetRepChart(recs, m) {
+  if (!window.Chart) return;
+  const maxReps = Math.max(...recs.map((r) => (r.reps || []).length), 0);
+  const labels = Array.from({ length: maxReps }, (_, j) => `${j + 1}本`);
+  const datasets = recs.map((r, i) => ({
+    label: `第${r.setNo || i + 1}ｾｯﾄ`,
+    data: (r.reps || []).map((x) => +(x.timeMs / 1000).toFixed(2)),
+    borderColor: TR_SET_PALETTE[i % TR_SET_PALETTE.length],
+    backgroundColor: "transparent", tension: 0.2, pointRadius: 4, fill: false
+  }));
+  datasets.push({ label: "サークル", data: labels.map(() => +(m.circleMs / 1000).toFixed(2)), borderColor: "#ff7a1a", borderDash: [6, 4], pointRadius: 0, fill: false });
+  chTrSetRep = new Chart($("#tr-chart-setrep"), { type: "line", data: { labels, datasets }, options: chartOpts("秒（小さいほど速い）") });
 }
 
 // ══ 記録会（フェーズ1：作成・エントリー） ══════════════
