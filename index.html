@@ -179,62 +179,55 @@
     <section id="screen-practice-setup" class="screen" hidden>
       <header class="bar">
         <button class="ghost back" id="ps-back">← 戻る</button>
-        <span class="bar-title">練習を計測</span>
+        <span class="bar-title">選手を選ぶ</span>
         <span class="spacer"></span>
+        <button class="icon-btn" id="ps-settings-btn" aria-label="設定">⚙</button>
       </header>
-      <p class="lead">レーン内の選手を出発順に追加してください（最大5名）。</p>
-      <div class="ps-menu-pick">
-        <div class="ps-menu-head">
-          <span class="ps-menu-ttl">📋 メニューから選ぶ</span>
-          <input id="ps-menu-date" type="date" class="ps-menu-date" />
-        </div>
-        <div id="ps-menu-list" class="ps-menu-list"></div>
-      </div>
-      <div id="ps-menu-sel" class="ps-menu-sel" hidden></div>
-      <label class="field"><span>分類</span>
-        <select id="ps-cat">
-          <option value="">— 分類を選択 —</option>
-          <option value="A">A：リカバリー・フォーム</option>
-          <option value="B">B：有酸素持久力</option>
-          <option value="C">C：レース持久力・閾値</option>
-          <option value="D">D：対乳酸</option>
-          <option value="E">E：スプリント・スピード</option>
-        </select>
-      </label>
-      <label class="field"><span>種類</span>
-        <div class="seg seg3" id="ps-type"><button data-type="Kick">Kick</button><button data-type="Pull">Pull</button><button data-type="Swim" class="on">Swim</button></div>
-      </label>
-      <label class="field"><span>メモ（任意）</span><input id="ps-name" type="text" placeholder="例：HARD / EASY / DASH" /></label>
+      <p class="lead">出発順に選手を追加してください（最大5名）。</p>
       <label class="field"><span>選手（出発順に追加）</span>
         <select id="ps-add"><option value="">＋ 選手を追加</option></select>
       </label>
       <div class="ps-order" id="ps-order"></div>
+      <button id="btn-ps-begin" class="big start" disabled>練習を始める →</button>
+    </section>
+
+    <!-- 練習：メニュー選択 -->
+    <section id="screen-practice-menu" class="screen" hidden>
+      <header class="bar">
+        <button class="ghost back" id="pm-back">← 選手の変更</button>
+        <span class="bar-title">メニューを選ぶ</span>
+        <span class="spacer"></span>
+        <button class="icon-btn" id="pm-settings-btn" aria-label="設定">⚙</button>
+      </header>
+      <label class="field"><span>日付</span><input id="pm-date" type="date" /></label>
+      <div class="mb-table-wrap">
+        <table class="mb-table pm-table" id="pm-table"></table>
+      </div>
+      <p class="hint">計測するメニューをタップ → 距離・本数・サークルが自動入力されます（手入力も可）。</p>
       <div class="frow">
-        <label class="field"><span>1本の距離(m)</span><input id="ps-distance" type="number" inputmode="numeric" min="0" step="25" value="100" /></label>
-        <label class="field"><span>本数</span><input id="ps-reps" type="number" inputmode="numeric" min="1" step="1" value="10" /></label>
+        <label class="field"><span>1本の距離(m)</span><input id="pm-distance" type="number" inputmode="numeric" min="0" step="25" /></label>
+        <label class="field"><span>本数</span><input id="pm-reps" type="number" inputmode="numeric" min="1" step="1" /></label>
       </div>
       <label class="field"><span>サークル（分・秒）</span>
         <div class="circle-pick">
-          <select id="ps-cmin"></select><span class="cu">分</span>
-          <select id="ps-csec"></select><span class="cu">秒</span>
+          <select id="pm-cmin"></select><span class="cu">分</span>
+          <select id="pm-csec"></select><span class="cu">秒</span>
         </div>
       </label>
-      <div class="frow">
-        <label class="field"><span>出発間隔（秒）</span><input id="ps-gap" type="number" inputmode="numeric" min="0" step="1" value="5" /></label>
-        <label class="field"><span>プール</span>
-          <div class="seg" id="ps-pool"><button data-pool="25" class="on">25m</button><button data-pool="50">50m</button></div>
-        </label>
-      </div>
-      <label class="field"><span>ラップ計測（区切り）</span>
-        <div class="seg seg4" id="ps-lap"><button data-lapd="0" class="on">なし</button><button data-lapd="25">25m</button><button data-lapd="50">50m</button><button data-lapd="100">100m</button></div>
+      <label class="field"><span>種類</span>
+        <div class="seg seg3" id="pm-type"><button data-type="Kick">Kick</button><button data-type="Pull">Pull</button><button data-type="Swim" class="on">Swim</button></div>
       </label>
-      <button id="btn-ps-begin" class="big start" disabled>計測へ進む</button>
+      <label class="field"><span>ラップ計測（区切り）</span>
+        <div class="seg seg4" id="pm-lap"><button data-lapd="0" class="on">なし</button><button data-lapd="25">25m</button><button data-lapd="50">50m</button><button data-lapd="100">100m</button></div>
+      </label>
+      <label class="field"><span>メモ（任意）</span><input id="pm-note" type="text" placeholder="例：HARD / DPS / 4H1E" /></label>
+      <button id="btn-pm-begin" class="big start">計測へ進む →</button>
     </section>
 
     <!-- 練習：計測 -->
     <section id="screen-practice-run" class="screen" hidden>
       <header class="bar">
-        <button class="ghost back" id="pr-back">← 中止</button>
+        <button class="ghost back" id="pr-back">← 戻る</button>
         <span class="bar-title pr-menu" id="pr-menu">練習</span>
         <span class="spacer"></span>
       </header>
@@ -667,6 +660,17 @@
 
   <div id="toast" class="toast"></div>
 
+  <div id="ps-settings" class="modal" hidden>
+    <div class="modal-box">
+      <div class="modal-title">計測の設定</div>
+      <label class="field"><span>出発間隔（秒）</span><input id="set-gap" type="number" inputmode="numeric" min="0" step="1" /></label>
+      <label class="field"><span>プールの距離</span>
+        <div class="seg" id="set-pool"><button data-pool="25">25m</button><button data-pool="50">50m</button></div>
+      </label>
+      <button id="set-close" class="big blue">閉じる</button>
+    </div>
+  </div>
+
   <div id="unsaved-modal" class="modal" hidden>
     <div class="modal-box">
       <div class="modal-title">記録が保存されていません</div>
@@ -690,6 +694,6 @@
   <div id="flash" aria-hidden="true"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script type="module" src="./app.js?v=20260624b"></script>
+  <script type="module" src="./app.js?v=20260624c"></script>
 </body>
 </html>

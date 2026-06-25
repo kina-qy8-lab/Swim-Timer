@@ -656,3 +656,19 @@ button { font-family: inherit; }
 .ps-set-btns { display: flex; gap: 6px; flex-wrap: wrap; }
 .ps-set-btn { min-width: 38px; height: 38px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 10px; font-size: 16px; font-weight: 700; cursor: pointer; }
 .ps-set-btn.on { background: var(--blue); color: #fff; border-color: var(--blue); }
+
+/* ── 練習：3画面フロー（歯車・メニュー選択・セット） ─────────── */
+.icon-btn { border: 1px solid var(--line); background: var(--surface); color: var(--blue-deep); width: 40px; height: 40px; border-radius: 10px; font-size: 20px; line-height: 1; cursor: pointer; flex: 0 0 auto; }
+.icon-btn:active { background: var(--blue-soft); }
+/* メニュー選択：計測対象行はタップ可、選択中はオレンジ */
+.pm-table tbody tr.pm-pick { cursor: pointer; }
+.pm-table tbody tr.pm-pick:active { background: var(--blue-soft); }
+.pm-table tbody tr.pm-nopick { opacity: .5; }
+.pm-table tbody tr.sel { background: #fff1e6; box-shadow: inset 0 0 0 2px var(--orange); }
+.pm-table tbody tr.sel td { color: var(--ink); }
+.pm-table tbody tr.sel .mb-type { color: var(--orange-deep); }
+.pm-table tbody tr.sel b { color: var(--orange-deep); }
+/* 確認画面：セットラベル */
+.prv-set { display: inline-block; font-size: 11px; font-weight: 800; color: #fff; background: var(--blue); border-radius: 6px; padding: 2px 7px; margin-left: 6px; }
+.modal .field { margin-bottom: 14px; }
+.modal #set-close { width: 100%; margin-top: 4px; }

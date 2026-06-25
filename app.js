@@ -256,7 +256,7 @@ onValue(ref(db, MEMBERS), (s) => {
 });
 onValue(ref(db, RESULTS), (s) => { results = s.val() || {}; if (!$("#screen-records").hidden) renderRecordsAll(); });
 onValue(ref(db, TRAINING), (s) => { training = s.val() || {}; if (!$("#screen-records").hidden && recMode === "practice") renderTraining(); });
-onValue(ref(db, DAILYMENUS), (s) => { dailyMenus = s.val() || {}; if (!$("#screen-menu-builder").hidden) renderMenuBuilder(); if (!$("#screen-practice-setup").hidden) psRenderMenuList(); });
+onValue(ref(db, DAILYMENUS), (s) => { dailyMenus = s.val() || {}; if (!$("#screen-menu-builder").hidden) renderMenuBuilder(); if (!$("#screen-practice-menu").hidden) renderMenuPick(); });
 onValue(ref(db, MEETS), (s) => {
   meets = s.val() || {};
   meetsLoaded = true;
@@ -1399,7 +1399,8 @@ function mbMoveItem(id, dir) {
 }
 
 // ══ 練習計測（1端末1レーン・独立スタート） ══════════════
-let trSetup = null;   // 設定中の状態
+let trSetup = null;   // （旧）設定中の状態：未使用
+let psSession = null; // 練習セッション（選手・設定・選択メニューを画面間で引き継ぐ）
 let tr = null;        // ライブ計測の状態
 let trReview = null;  // 確認画面用に確定した配列
 
@@ -1473,170 +1474,212 @@ function trLiveState(sw, menu, t) {
   return { done: false, currentRep, lapInRep, lpr, S, phase, value: phase === "wait" ? S - t : t - S };
 }
 
-// ── 設定画面 ──
-let psMenuDate = null;   // メニュー選択パネルの対象日
-function enterPracticeSetup() {
-  role = null; myLane = null; timingMeetId = null;
-  trSetup = { order: [], poolLength: 25, lapDistM: 0, strokeType: "Swim", menuRef: null, menuStyle: "" };
-  if (!$("#ps-distance").value) $("#ps-distance").value = 100;
-  if (!$("#ps-reps").value) $("#ps-reps").value = 10;
-  if (!$("#ps-gap").value) $("#ps-gap").value = 5;
-  if (!$("#ps-cmin").dataset.filled) {
-    $("#ps-cmin").innerHTML = Array.from({ length: 10 }, (_, i) => `<option value="${i}">${i}</option>`).join("");
-    $("#ps-csec").innerHTML = Array.from({ length: 60 }, (_, i) => `<option value="${i}">${String(i).padStart(2, "0")}</option>`).join("");
-    $("#ps-cmin").value = "1"; $("#ps-csec").value = "30"; $("#ps-cmin").dataset.filled = "1";
-  }
-  $("#ps-cat").value = "";
-  psMenuDate = todayISO();
-  $("#ps-menu-date").value = psMenuDate;
-  psClearMenuSel(true);
-  psRenderMenuList();
-  renderPracticeSetup();
-  show("screen-practice-setup");
+// ── 練習セッション（選手・設定・選択メニューを画面間で引き継ぐ） ──
+// psSession = { swimmers:[{memberId,name,school}], gapSec, poolLength, menuDate, selItemId }
+let pmStroke = "Swim";   // メニュー選択画面の種類
+let pmLapDist = 0;       // メニュー選択画面のラップ区切り
+function psEnsureSession() {
+  if (!psSession) psSession = { swimmers: [], gapSec: 10, poolLength: 25, menuDate: todayISO(), selItemId: null };
 }
 
-// メニュー選択パネル：その日の計測対象メニューを一覧
-function psRenderMenuList() {
-  const items = mbItems(psMenuDate).filter((it) => it.measurable);
-  if (!items.length) {
-    $("#ps-menu-list").innerHTML = `<p class="ps-menu-empty">この日の計測対象メニューはありません。下の項目を手入力してください。</p>`;
-    return;
+// ── 画面1：選手選択 ──
+function enterPracticeSetup() {
+  role = null; myLane = null; timingMeetId = null;
+  psEnsureSession();
+  if (!$("#pm-cmin").dataset.filled) {
+    $("#pm-cmin").innerHTML = Array.from({ length: 10 }, (_, i) => `<option value="${i}">${i}</option>`).join("");
+    $("#pm-csec").innerHTML = Array.from({ length: 60 }, (_, i) => `<option value="${i}">${String(i).padStart(2, "0")}</option>`).join("");
+    $("#pm-cmin").value = "1"; $("#pm-csec").value = "30"; $("#pm-cmin").dataset.filled = "1";
   }
-  const selId = trSetup && trSetup.menuRef ? trSetup.menuRef.itemId : null;
-  $("#ps-menu-list").innerHTML = items.map((it) => {
-    const sets = it.sets > 1 ? `×${it.sets}set` : "";
-    const tag = [it.category, it.style].filter(Boolean).join("・");
-    const memo = it.note ? `<span class="psm-note">${escapeHtml(it.note)}</span>` : "";
-    return `<button class="ps-menu-item${it.id === selId ? " on" : ""}" data-ps-menu="${it.id}">
-      <span class="psm-main">${escapeHtml(it.type || "")} ${it.distance}m×${it.reps}${sets}</span>
-      <span class="psm-sub">${tag ? escapeHtml(tag) + "・" : ""}ｻｰｸﾙ${fmtHMS(it.circleMs || 0)}</span>${memo}
-    </button>`;
-  }).join("");
+  renderSwimmerSetup();
+  show("screen-practice-setup");
 }
-function psSetCircle(ms) {
-  const mn = Math.floor((ms || 0) / 60000), sc = Math.floor(((ms || 0) % 60000) / 1000);
-  if (mn <= 9) $("#ps-cmin").value = String(mn);
-  $("#ps-csec").value = String(sc);
+function psAddSwimmer(id) {
+  if (!psSession || psSession.swimmers.some((s) => s.memberId === id)) return;
+  if (psSession.swimmers.length >= 5) { alert("レーン内の選手は最大5名です。"); return; }
+  const m = members[id] || {};
+  psSession.swimmers.push({ memberId: id, name: m.name || "—", school: m.school || OWN_SCHOOL });
+  renderSwimmerSetup();
 }
-function psSelectMenuItem(itemId) {
-  const it = mbItems(psMenuDate).find((x) => x.id === itemId);
-  if (!it) return;
-  const prevSet = (trSetup.menuRef && trSetup.menuRef.itemId === itemId) ? trSetup.menuRef.setNo : 1;
-  trSetup.menuRef = { dateISO: psMenuDate, itemId, setNo: Math.min(prevSet || 1, it.sets || 1) };
-  trSetup.menuStyle = it.style || "";
-  trSetup.strokeType = ["Kick", "Pull", "Swim"].includes(it.type) ? it.type : "Swim";
-  $("#ps-cat").value = it.category || "";
-  $("#ps-distance").value = it.distance || "";
-  $("#ps-reps").value = it.reps || "";
-  $("#ps-name").value = it.note || "";
-  psSetCircle(it.circleMs || 0);
-  psRenderSelBanner(it);
-  psRenderMenuList();
-  renderPracticeSetup();
-}
-function psRenderSelBanner(it) {
-  if (!it) { $("#ps-menu-sel").hidden = true; $("#ps-menu-sel").innerHTML = ""; return; }
-  const setNo = trSetup.menuRef ? trSetup.menuRef.setNo : 1;
-  let setPick = "";
-  if ((it.sets || 1) > 1) {
-    const btns = Array.from({ length: it.sets }, (_, i) => i + 1)
-      .map((n) => `<button class="ps-set-btn${n === setNo ? " on" : ""}" data-ps-set="${n}">${n}</button>`).join("");
-    setPick = `<div class="ps-set-pick"><span>計測するセット</span><div class="ps-set-btns">${btns}</div></div>`;
-  }
-  $("#ps-menu-sel").innerHTML =
-    `<div class="ps-sel-row"><span class="ps-sel-txt">選択中：${escapeHtml(it.type || "")} ${it.distance}m×${it.reps}${(it.sets || 1) > 1 ? `（全${it.sets}set）` : ""}</span>` +
-    `<button class="ghost ps-sel-clear" data-ps-menu-clear>解除</button></div>${setPick}`;
-  $("#ps-menu-sel").hidden = false;
-}
-function psClearMenuSel(silent) {
-  if (trSetup) { trSetup.menuRef = null; trSetup.menuStyle = ""; }
-  $("#ps-menu-sel").hidden = true;
-  $("#ps-menu-sel").innerHTML = "";
-  if (!silent) { psRenderMenuList(); renderPracticeSetup(); }
-}
-function trAddSwimmer(id) {
-  if (!trSetup || trSetup.order.includes(id)) return;
-  if (trSetup.order.length >= 5) { alert("レーン内の選手は最大5名です。"); return; }
-  trSetup.order.push(id); renderPracticeSetup();
-}
-function trRemoveSwimmer(i) { if (!trSetup) return; trSetup.order.splice(i, 1); renderPracticeSetup(); }
-function trMoveSwimmer(i, d) { if (!trSetup) return; const o = trSetup.order, j = i + d; if (j < 0 || j >= o.length) return; [o[i], o[j]] = [o[j], o[i]]; renderPracticeSetup(); }
-function renderPracticeSetup() {
-  if (!trSetup) return;
-  $$("#ps-pool button").forEach((x) => x.classList.toggle("on", Number(x.dataset.pool) === trSetup.poolLength));
-  $$("#ps-lap button").forEach((x) => x.classList.toggle("on", Number(x.dataset.lapd) === trSetup.lapDistM));
-  $$("#ps-type button").forEach((x) => x.classList.toggle("on", x.dataset.type === trSetup.strokeType));
-  const chosen = new Set(trSetup.order);
+function psRemoveSwimmer(i) { if (!psSession) return; psSession.swimmers.splice(i, 1); renderSwimmerSetup(); }
+function psMoveSwimmer(i, d) { if (!psSession) return; const o = psSession.swimmers, j = i + d; if (j < 0 || j >= o.length) return; [o[i], o[j]] = [o[j], o[i]]; renderSwimmerSetup(); }
+function renderSwimmerSetup() {
+  if (!psSession) return;
+  const chosen = new Set(psSession.swimmers.map((s) => s.memberId));
   const opts = memberList().filter((m) => !m.retired && (m.school || OWN_SCHOOL) === OWN_SCHOOL && !chosen.has(m.id));
   $("#ps-add").innerHTML = `<option value="">＋ 選手を追加</option>` + opts.map((m) => `<option value="${m.id}">${escapeHtml(m.name)}（${m.grade || ""}年）</option>`).join("");
-  const gap = Number($("#ps-gap").value || 0);
-  $("#ps-order").innerHTML = trSetup.order.length ? trSetup.order.map((id, i) => {
-    const m = members[id] || {};
-    return `<div class="ps-row"><span class="ps-no">${i + 1}</span><span class="ps-nm">${escapeHtml(m.name || "—")}</span><span class="ps-off">${i === 0 ? "基準" : "+" + (i * gap) + "秒"}</span>` +
+  const gap = psSession.gapSec;
+  $("#ps-order").innerHTML = psSession.swimmers.length ? psSession.swimmers.map((s, i) => {
+    return `<div class="ps-row"><span class="ps-no">${i + 1}</span><span class="ps-nm">${escapeHtml(s.name || "—")}</span><span class="ps-off">${i === 0 ? "基準" : "+" + (i * gap) + "秒"}</span>` +
       `<button class="ps-mini" data-ps-up="${i}" ${i === 0 ? "disabled" : ""}>↑</button>` +
-      `<button class="ps-mini" data-ps-dn="${i}" ${i === trSetup.order.length - 1 ? "disabled" : ""}>↓</button>` +
+      `<button class="ps-mini" data-ps-dn="${i}" ${i === psSession.swimmers.length - 1 ? "disabled" : ""}>↓</button>` +
       `<button class="ps-mini rm" data-ps-rm="${i}">✕</button></div>`;
   }).join("") : `<p class="hint">出発順に選手を追加してください（最大5名）。</p>`;
-  $("#btn-ps-begin").disabled = trSetup.order.length < 1;
+  $("#btn-ps-begin").disabled = psSession.swimmers.length < 1;
 }
-function trBegin() {
-  if (!trSetup || !trSetup.order.length) return;
-  const distance = Number($("#ps-distance").value);
-  const reps = Number($("#ps-reps").value);
-  const circleMs = (Number($("#ps-cmin").value || 0) * 60 + Number($("#ps-csec").value || 0)) * 1000;
-  const gapSec = Number($("#ps-gap").value || 0);
-  const name = ($("#ps-name").value || "").trim();
-  const category = $("#ps-cat").value || "";
-  const strokeType = trSetup.strokeType || "Swim";
+
+// ── 設定モーダル（出発間隔・プール） ──
+function openPsSettings() {
+  psEnsureSession();
+  $("#set-gap").value = psSession.gapSec;
+  $$("#set-pool button").forEach((b) => b.classList.toggle("on", Number(b.dataset.pool) === psSession.poolLength));
+  $("#ps-settings").hidden = false;
+}
+function closePsSettings() {
+  psSession.gapSec = Math.max(0, Number($("#set-gap").value) || 0);
+  $("#ps-settings").hidden = true;
+  if (!$("#screen-practice-setup").hidden) renderSwimmerSetup();
+}
+
+// ── 画面2：メニュー選択 ──
+function enterMenuPick() {
+  psEnsureSession();
+  if (!psSession.swimmers.length) { enterPracticeSetup(); return; }
+  $("#pm-date").value = psSession.menuDate;
+  renderMenuPick();
+  show("screen-practice-menu");
+}
+function pmSetCircle(ms) {
+  const mn = Math.floor((ms || 0) / 60000), sc = Math.floor(((ms || 0) % 60000) / 1000);
+  if (mn <= 9) $("#pm-cmin").value = String(mn);
+  $("#pm-csec").value = String(sc);
+}
+function renderMenuPick() {
+  const items = mbItems(psSession.menuDate);
+  const head = `<thead><tr>
+    <th>区分</th><th>分類</th><th>距離</th><th>本</th><th>ｾｯﾄ</th>
+    <th class="mb-note-h">詳細</th><th>ｽﾀｲﾙ</th><th>ｻｰｸﾙ</th>
+    <th>合計<br>時間</th><th>合計<br>距離</th>
+  </tr></thead>`;
+  const rows = items.map((it) => {
+    const t = mbItemTime(it), d = mbItemDist(it);
+    const cat = it.category ? `<span class="mb-cat cat-${it.category}">${it.category}</span>` : "—";
+    const noMeas = it.measurable ? "" : `<span class="mb-nomeas">記録外</span>`;
+    const sel = (it.id === psSession.selItemId) ? " sel" : "";
+    const cls = it.measurable ? "pm-pick" : "pm-nopick";
+    return `<tr class="${cls}${sel}"${it.measurable ? ` data-pm-row="${it.id}"` : ""}>
+      <td>${cat}</td>
+      <td class="mb-type">${escapeHtml(it.type || "")}${noMeas}</td>
+      <td>${it.distance || 0}</td><td>${it.reps || 0}</td><td>${it.sets || 1}</td>
+      <td class="mb-note">${escapeHtml(it.note || "")}</td>
+      <td>${escapeHtml(it.style || "—")}</td>
+      <td>${it.circleMs ? fmtHMS(it.circleMs) : "—"}</td>
+      <td><b>${fmtHMS(t)}</b></td><td><b>${d}</b></td>
+    </tr>`;
+  }).join("");
+  const body = rows || `<tr><td colspan="10" class="mb-empty">この日のメニューがありません。下の項目を手入力して計測できます。</td></tr>`;
+  $("#pm-table").innerHTML = head + `<tbody>${body}</tbody>`;
+  $$("#pm-type button").forEach((x) => x.classList.toggle("on", x.dataset.type === pmStroke));
+  $$("#pm-lap button").forEach((x) => x.classList.toggle("on", Number(x.dataset.lapd) === pmLapDist));
+}
+function pmSelectItem(id) {
+  const it = mbItems(psSession.menuDate).find((x) => x.id === id);
+  if (!it || !it.measurable) return;
+  psSession.selItemId = id;
+  $("#pm-distance").value = it.distance || "";
+  $("#pm-reps").value = it.reps || "";
+  pmSetCircle(it.circleMs || 0);
+  $("#pm-note").value = it.note || "";
+  pmStroke = ["Kick", "Pull", "Swim"].includes(it.type) ? it.type : "Swim";
+  renderMenuPick();
+}
+
+// ── 計測開始：tr を構築（複数セット対応） ──
+function pmBegin() {
+  psEnsureSession();
+  const distance = Number($("#pm-distance").value);
+  const reps = Number($("#pm-reps").value);
+  const circleMs = (Number($("#pm-cmin").value || 0) * 60 + Number($("#pm-csec").value || 0)) * 1000;
   if (!distance || !reps || !circleMs) { alert("距離・本数・サークルを正しく入力してください。"); return; }
-  const menu = { name, category, strokeType, poolLength: trSetup.poolLength, distance, reps, circleMs, lapDistM: trSetup.lapDistM || 0, startGapMs: Math.round(gapSec * 1000), style: trSetup.menuStyle || "", menuRef: trSetup.menuRef || null };
-  const swimmers = trSetup.order.map((id, i) => {
-    const m = members[id] || {};
-    return { memberId: id, name: m.name || "—", school: m.school || OWN_SCHOOL, offsetMs: i * menu.startGapMs, presses: [] };
-  });
-  tr = { state: "ready", t0: null, menu, swimmers, log: [], dateISO: todayISO() };
+  const it = psSession.selItemId ? mbItems(psSession.menuDate).find((x) => x.id === psSession.selItemId) : null;
+  const totalSets = it ? (it.sets || 1) : 1;
+  const menu = {
+    name: ($("#pm-note").value || "").trim(),
+    category: it ? (it.category || "") : "",
+    strokeType: pmStroke || "Swim",
+    style: it ? (it.style || "") : "",
+    poolLength: psSession.poolLength,
+    distance, reps, circleMs,
+    lapDistM: pmLapDist || 0,
+    startGapMs: Math.round((psSession.gapSec || 0) * 1000),
+    sets: totalSets,
+    menuRef: it ? { dateISO: psSession.menuDate, itemId: it.id } : null
+  };
+  tr = { menu, totalSets, curSet: 0, sets: [], dateISO: todayISO() };
+  trAddSet();
   renderPracticeRun();
   show("screen-practice-run");
 }
+function curSet() { return tr ? tr.sets[tr.curSet - 1] : null; }
+function trAddSet() {
+  const setNo = tr.sets.length + 1;
+  const swimmers = psSession.swimmers.map((s, i) => ({ memberId: s.memberId, name: s.name, school: s.school, offsetMs: i * tr.menu.startGapMs, presses: [] }));
+  tr.sets.push({ setNo, t0: null, state: "ready", log: [], swimmers });
+  tr.curSet = setNo;
+}
 
-// ── 計測画面 ──
+// ── 画面3：計測 ──
 function trStart() {
-  if (!tr || tr.state === "running") return;
+  const s = curSet(); if (!tr || !s || s.state === "running") return;
   ensureAudio();
   const t0Local = Date.now() + START_LEAD_MS;
   scheduleBeepAt(t0Local);
-  tr.t0 = t0Local + serverOffset;
-  tr.state = "running";
+  s.t0 = t0Local + serverOffset;
+  s.state = "running";
   renderPracticeRun();
 }
+function trNextSet() {
+  if (!tr || tr.curSet >= tr.totalSets) return;
+  trAddSet();
+  trStart();
+}
+function trSetDone(s) { const lpr = trLapsPerRep(tr.menu); return s.swimmers.every((sw) => Math.floor((sw.presses || []).length / lpr) >= tr.menu.reps); }
 function trPress(si) {
-  if (!tr || tr.state !== "running") return;
-  const sw = tr.swimmers[si]; if (!sw) return;
+  const s = curSet();
+  if (!tr || !s || s.state !== "running") return;
+  const sw = s.swimmers[si]; if (!sw) return;
   const lpr = trLapsPerRep(tr.menu);
   sw.presses = sw.presses || [];
   if (sw.presses.length >= tr.menu.reps * lpr) return;
-  const t = serverNow() - tr.t0;
+  const t = serverNow() - s.t0;
   if (t < 0) return;
   sw.presses.push(Math.round(t));
-  tr.log.push(si);
+  s.log.push(si);
+  if (trSetDone(s)) s.state = "done";
   renderPracticeRun();
 }
 function trUndo() {
-  if (!tr || !tr.log || !tr.log.length) return;
-  const si = tr.log.pop();
-  const sw = tr.swimmers[si];
+  const s = curSet();
+  if (!tr || !s || !s.log || !s.log.length) return;
+  const si = s.log.pop();
+  const sw = s.swimmers[si];
   if (sw && sw.presses && sw.presses.length) sw.presses.pop();
+  if (s.state === "done") s.state = "running";
   renderPracticeRun();
+}
+function trBackFromRun() {
+  const anyData = tr && tr.sets.some((st) => st.swimmers.some((sw) => (sw.presses || []).length));
+  if (anyData && !confirm("このメニューの計測を中止して戻りますか？（保存されていない記録は破棄されます）")) return;
+  tr = null; trReview = null;
+  enterMenuPick();
 }
 function renderPracticeRun() {
   if (!tr) return;
-  $("#pr-menu").innerHTML = trMenuHead(tr.menu);
-  const ready = tr.state === "ready";
-  $("#pr-start-row").hidden = !ready;
-  $("#pr-ctrl-row").hidden = ready;
-  if (ready) $("#pr-clock").textContent = "0.00";
+  const s = curSet(); if (!s) return;
+  const setTag = tr.totalSets > 1 ? `［${s.setNo}/${tr.totalSets}セット］ ` : "";
+  $("#pr-menu").innerHTML = setTag + trMenuHead(tr.menu);
+  const moreSets = tr.curSet < tr.totalSets;
+  const anyData = tr.sets.some((st) => st.swimmers.some((sw) => (sw.presses || []).length));
+  let startVisible = false, startText = "", startNext = false;
+  if (s.state === "ready") { startVisible = true; startText = tr.totalSets > 1 ? `スタート（${s.setNo}/${tr.totalSets}セット）` : "スタート（発進音）"; }
+  else if (s.state === "done" && moreSets) { startVisible = true; startNext = true; startText = `スタート（${s.setNo + 1}/${tr.totalSets}セット）`; }
+  $("#pr-start-row").hidden = !startVisible;
+  if (startVisible) { $("#btn-pr-start").textContent = startText; $("#btn-pr-start").dataset.next = startNext ? "1" : ""; }
+  if (s.state === "ready" && !s.t0) $("#pr-clock").textContent = "0.00";
+  $("#pr-ctrl-row").hidden = !(s.state === "running" || anyData);
+  $("#btn-pr-undo").disabled = !(s.state === "running");
   const lpr = trLapsPerRep(tr.menu);
-  $("#pr-cards").innerHTML = tr.swimmers.map((sw, si) => {
+  $("#pr-cards").innerHTML = s.swimmers.map((sw, si) => {
     const reps = trComputeReps(sw, tr.menu);
     const last = reps[reps.length - 1];
     const pressDone = (sw.presses || []).length;
@@ -1662,11 +1705,12 @@ function renderPracticeRun() {
 }
 function tickPractice() {
   if (!tr || !$("#screen-practice-run") || $("#screen-practice-run").hidden) return;
-  const t = (tr.state === "running" && tr.t0 != null) ? (serverNow() - tr.t0) : 0;
-  const clk = $("#pr-clock"); if (clk && tr.state === "running") clk.textContent = fmt(Math.max(0, t));
-  tr.swimmers.forEach((sw, si) => {
+  const s = curSet(); if (!s) return;
+  const t = (s.state === "running" && s.t0 != null) ? (serverNow() - s.t0) : 0;
+  const clk = $("#pr-clock"); if (clk && s.state === "running") clk.textContent = fmt(Math.max(0, t));
+  s.swimmers.forEach((sw, si) => {
     const el = $(`#pr-live-${si}`); if (!el) return;
-    if (tr.state !== "running") { el.textContent = "—"; return; }
+    if (s.state !== "running") { el.textContent = "—"; return; }
     const st = trLiveState(sw, tr.menu, t);
     if (st.done) { el.textContent = "完了"; return; }
     el.textContent = st.phase === "wait" ? `出発まで ${fmtCd(st.value)}s` : fmt(st.value);
@@ -1676,7 +1720,13 @@ function tickPractice() {
 // ── 確認・保存 ──
 function trEnd() {
   if (!tr) return;
-  trReview = tr.swimmers.map((sw) => ({ sw, reps: trComputeReps(sw, tr.menu) })).filter((r) => r.reps.length > 0);
+  trReview = [];
+  tr.sets.forEach((st) => {
+    st.swimmers.forEach((sw) => {
+      const reps = trComputeReps(sw, tr.menu);
+      if (reps.length) trReview.push({ setNo: st.setNo, sw, reps });
+    });
+  });
   renderPracticeReview();
   show("screen-practice-review");
 }
@@ -1688,7 +1738,8 @@ function renderPracticeReview() {
   }
   $("#btn-prv-save").disabled = false;
   const lpr = trLapsPerRep(tr.menu);
-  $("#prv-body").innerHTML = trReview.map(({ sw, reps }) => {
+  const multi = tr.totalSets > 1;
+  $("#prv-body").innerHTML = trReview.map(({ setNo, sw, reps }) => {
     const times = reps.map((r) => r.timeMs);
     const avg = times.reduce((a, b) => a + b, 0) / times.length;
     const rows = reps.map((r) => {
@@ -1696,18 +1747,20 @@ function renderPracticeReview() {
       if (lpr > 1) row += `<div class="prv-laps">${trSegHtml(r)}</div>`;
       return row;
     }).join("");
-    return `<div class="prv-sw"><div class="prv-h"><b>${escapeHtml(sw.name)}</b><span>平均 ${fmt(avg)}・${reps.length}本</span></div><div class="prv-cap"><span>本</span><span>タイム</span><span>落ち幅</span><span>サークル</span></div>${rows}</div>`;
+    const setLbl = multi ? `<span class="prv-set">第${setNo}セット</span>` : "";
+    return `<div class="prv-sw"><div class="prv-h"><b>${escapeHtml(sw.name)}</b>${setLbl}<span>平均 ${fmt(avg)}・${reps.length}本</span></div><div class="prv-cap"><span>本</span><span>タイム</span><span>落ち幅</span><span>サークル</span></div>${rows}</div>`;
   }).join("");
 }
 function trSave() {
-  if (!tr || !trReview || !trReview.length) { trDiscard(); return; }
+  if (!tr || !trReview || !trReview.length) { trBackToMenu(); return; }
   const m = tr.menu, label = trMenuLabel(m);
-  trReview.forEach(({ sw, reps }) => {
+  trReview.forEach(({ setNo, sw, reps }) => {
     const times = reps.map((r) => r.timeMs);
     const rec = {
       dateISO: tr.dateISO, poolLength: m.poolLength,
-      menu: { name: m.name || "", category: m.category || "", strokeType: m.strokeType || "", style: m.style || "", distance: m.distance, reps: m.reps, circleMs: m.circleMs, lapDistM: m.lapDistM || 0, startGapMs: m.startGapMs || 0, label },
-      menuRef: m.menuRef || null,
+      menu: { name: m.name || "", category: m.category || "", strokeType: m.strokeType || "", style: m.style || "", distance: m.distance, reps: m.reps, circleMs: m.circleMs, lapDistM: m.lapDistM || 0, startGapMs: m.startGapMs || 0, sets: m.sets || 1, label },
+      menuRef: m.menuRef ? { ...m.menuRef, setNo } : null,
+      setNo,
       memberId: sw.memberId || null, name: sw.name, school: sw.school || OWN_SCHOOL, offsetMs: sw.offsetMs || 0,
       doneReps: reps.length,
       reps: reps.map((r) => ({ repNo: r.repNo, startMs: Math.round(r.startMs), finishMs: Math.round(r.finishMs), timeMs: Math.round(r.timeMs), madeCircle: !!r.madeCircle, restMs: Math.round(r.restMs), dropMs: r.dropMs == null ? null : Math.round(r.dropMs), laps: (r.laps || []).map((x) => Math.round(x)) })),
@@ -1718,11 +1771,18 @@ function trSave() {
     };
     set(push(ref(db, TRAINING)), rec);
   });
-  toast(`${trReview.length}名分の練習記録を保存しました`);
-  trCleanup(); show("screen-role");
+  toast(`${trReview.length}件の練習記録を保存しました`);
+  trBackToMenu();
 }
-function trDiscard() { trCleanup(); show("screen-role"); }
-function trCleanup() { tr = null; trReview = null; trSetup = null; }
+function trDiscard() { trBackToMenu(); }
+function trBackToMenu() {
+  tr = null; trReview = null;
+  enterMenuPick();   // 選手・選択メニューは維持
+}
+function trExitPractice() {
+  tr = null; trReview = null; psSession = null;
+  show("screen-role");
+}
 
 // ══ 練習分析（記録を見る → 練習タブ） ══════════════
 const TR_CAT_LABEL = { A: "リカバリー・フォーム", B: "有酸素持久力", C: "レース持久力・閾値", D: "対乳酸", E: "スプリント・スピード" };
@@ -2449,35 +2509,33 @@ $("#btn-save-manual").addEventListener("click", saveManual);
 
 // 練習計測
 $("#btn-practice").addEventListener("click", enterPracticeSetup);
-$("#ps-back").addEventListener("click", () => { trCleanup(); show("screen-role"); });
-$("#ps-add").addEventListener("change", (e) => { if (e.target.value) { trAddSwimmer(e.target.value); e.target.value = ""; } });
-$("#ps-gap").addEventListener("input", renderPracticeSetup);
+// 画面1：選手選択
+$("#ps-back").addEventListener("click", trExitPractice);
+$("#ps-add").addEventListener("change", (e) => { if (e.target.value) { psAddSwimmer(e.target.value); e.target.value = ""; } });
 $("#ps-order").addEventListener("click", (e) => {
-  const rm = e.target.closest("[data-ps-rm]"); if (rm) return trRemoveSwimmer(Number(rm.dataset.psRm));
-  const up = e.target.closest("[data-ps-up]"); if (up) return trMoveSwimmer(Number(up.dataset.psUp), -1);
-  const dn = e.target.closest("[data-ps-dn]"); if (dn) return trMoveSwimmer(Number(dn.dataset.psDn), 1);
+  const rm = e.target.closest("[data-ps-rm]"); if (rm) return psRemoveSwimmer(Number(rm.dataset.psRm));
+  const up = e.target.closest("[data-ps-up]"); if (up) return psMoveSwimmer(Number(up.dataset.psUp), -1);
+  const dn = e.target.closest("[data-ps-dn]"); if (dn) return psMoveSwimmer(Number(dn.dataset.psDn), 1);
 });
-$("#ps-pool").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; trSetup.poolLength = Number(b.dataset.pool); $$("#ps-pool button").forEach((x) => x.classList.toggle("on", x === b)); });
-$("#ps-lap").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; trSetup.lapDistM = Number(b.dataset.lapd); $$("#ps-lap button").forEach((x) => x.classList.toggle("on", x === b)); });
-$("#ps-type").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; trSetup.strokeType = b.dataset.type; $$("#ps-type button").forEach((x) => x.classList.toggle("on", x === b)); });
-$("#btn-ps-begin").addEventListener("click", trBegin);
-// 練習：メニューから選ぶ
-$("#ps-menu-date").addEventListener("change", (e) => { psMenuDate = e.target.value || todayISO(); psClearMenuSel(); });
-$("#ps-menu-list").addEventListener("click", (e) => { const b = e.target.closest("[data-ps-menu]"); if (!b) return; psSelectMenuItem(b.dataset.psMenu); });
-$("#ps-menu-sel").addEventListener("click", (e) => {
-  if (e.target.closest("[data-ps-menu-clear]")) { psClearMenuSel(); return; }
-  const s = e.target.closest("[data-ps-set]");
-  if (s && trSetup && trSetup.menuRef) {
-    trSetup.menuRef.setNo = Number(s.dataset.psSet);
-    const it = mbItems(psMenuDate).find((x) => x.id === trSetup.menuRef.itemId);
-    psRenderSelBanner(it);
-  }
-});
-$("#btn-pr-start").addEventListener("click", trStart);
+$("#btn-ps-begin").addEventListener("click", enterMenuPick);
+// 設定モーダル（出発間隔・プール）
+$("#ps-settings-btn").addEventListener("click", openPsSettings);
+$("#pm-settings-btn").addEventListener("click", openPsSettings);
+$("#set-pool").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; psSession.poolLength = Number(b.dataset.pool); $$("#set-pool button").forEach((x) => x.classList.toggle("on", x === b)); });
+$("#set-close").addEventListener("click", closePsSettings);
+// 画面2：メニュー選択
+$("#pm-back").addEventListener("click", enterPracticeSetup);
+$("#pm-date").addEventListener("change", (e) => { psSession.menuDate = e.target.value || todayISO(); renderMenuPick(); });
+$("#pm-table").addEventListener("click", (e) => { const r = e.target.closest("[data-pm-row]"); if (r) pmSelectItem(r.dataset.pmRow); });
+$("#pm-type").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; pmStroke = b.dataset.type; $$("#pm-type button").forEach((x) => x.classList.toggle("on", x === b)); });
+$("#pm-lap").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; pmLapDist = Number(b.dataset.lapd); $$("#pm-lap button").forEach((x) => x.classList.toggle("on", x === b)); });
+$("#btn-pm-begin").addEventListener("click", pmBegin);
+// 画面3：計測
+$("#btn-pr-start").addEventListener("click", (e) => { if (e.currentTarget.dataset.next === "1") trNextSet(); else trStart(); });
 $("#btn-pr-undo").addEventListener("click", trUndo);
 $("#btn-pr-end").addEventListener("click", trEnd);
 $("#pr-cards").addEventListener("click", (e) => { const c = e.target.closest("[data-pr-si]"); if (c) trPress(Number(c.dataset.prSi)); });
-$("#pr-back").addEventListener("click", () => { if (confirm("計測を中止して戻りますか？（記録は保存されません）")) { trCleanup(); show("screen-role"); } });
+$("#pr-back").addEventListener("click", trBackFromRun);
 $("#btn-prv-save").addEventListener("click", trSave);
 $("#btn-prv-discard").addEventListener("click", trDiscard);
 $("#prv-back").addEventListener("click", () => { show("screen-practice-run"); });
