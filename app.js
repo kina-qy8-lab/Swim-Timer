@@ -76,7 +76,7 @@ let mbDate = null;            // メニュー作成画面の対象日
 let mbEditingId = null;       // 編集中の行ID（新規は null）
 let mbFilled = false;         // サークルselectの初期化済みフラグ
 let chProgress = null, chOverlay = null, chLap = null, chShape = null, chDeficit = null;
-let chTrRep = null, chTrTrend = null, chTrSeg = null, chTrSetRep = null, chTrSetAvg = null;
+let chTrRep = null, chTrTrend = null, chTrSeg = null, chTrSetRep = null, chTrSetAvg = null, chTrSegTrend = null, chTrSetSeg = null;
 let training = {};
 let trFilter = "", trDate = "", trMenuId = null, trCalYM = null;
 let viewPassHash = null;
@@ -1828,7 +1828,7 @@ function trCatTag(m) {
   const t = m.strokeType ? `<span class="tr-tag type">${escapeHtml(m.strokeType)}</span>` : "";
   return c + t;
 }
-function trDestroyCharts() { chTrRep?.destroy(); chTrTrend?.destroy(); chTrSeg?.destroy(); chTrSetRep?.destroy(); chTrSetAvg?.destroy(); chTrRep = chTrTrend = chTrSeg = chTrSetRep = chTrSetAvg = null; }
+function trDestroyCharts() { chTrRep?.destroy(); chTrTrend?.destroy(); chTrSeg?.destroy(); chTrSetRep?.destroy(); chTrSetAvg?.destroy(); chTrSegTrend?.destroy(); chTrSetSeg?.destroy(); chTrRep = chTrTrend = chTrSeg = chTrSetRep = chTrSetAvg = chTrSegTrend = chTrSetSeg = null; }
 
 function renderTrCalendar(dates) {
   if (!trCalYM) return;
@@ -1933,7 +1933,8 @@ function renderTrainingDetail(r) {
     return row;
   }).join("");
   const trendRecs = trainingList(trFilter).filter((o) => trSig(o.menu) === trSig(m));
-  const segHtml = lpr > 1 ? `<div class="sec-title">区間ペース（位置別の平均）</div><div class="chart-wrap"><canvas id="tr-chart-seg"></canvas></div><p class="hint">1本の中で、各折り返し区間の平均タイム。右肩上がりだと後半で失速しています。</p>` : "";
+  const segHtml = lpr > 1 ? `<div class="sec-title">区間ペース（位置別の平均）</div><div class="chart-wrap"><canvas id="tr-chart-seg"></canvas></div><p class="hint">1本の中で、各折り返し区間の平均タイム。右肩上がりだと後半で失速しています。</p>
+    <div class="sec-title">区間別タイムの推移（本数ごと）</div><div class="chart-wrap"><canvas id="tr-chart-segtrend"></canvas></div><p class="hint">${escapeHtml(trSplitNote(reps))}</p>` : "";
   const trendHtml = trendRecs.length >= 2 ? `<div class="sec-title">同じメニューの推移（練習日ごと）</div><div class="chart-wrap"><canvas id="tr-chart-trend"></canvas></div><p class="hint">同じ内容の練習日ごとの平均タイム。下がっていれば改善です。</p>` : "";
   let fadeNote;
   if (Math.abs(fade) < 100) fadeNote = "前半と後半でほぼ一定のペースを保てています。";
@@ -1955,7 +1956,7 @@ function renderTrainingDetail(r) {
     ${segHtml}
     ${trendHtml}`;
   trDrawRepChart(reps, m);
-  if (lpr > 1) trDrawSegChart(reps, lpr);
+  if (lpr > 1) { trDrawSegChart(reps, lpr); trDrawSegTrendChart(reps, lpr); }
   if (trendRecs.length >= 2) trDrawTrendChart(trendRecs, m);
 }
 
@@ -1979,6 +1980,53 @@ function trDrawSegChart(reps, lpr) {
   reps.forEach((r) => trSegTimes(r).forEach((s, j) => { if (j < lpr) { sums[j] += s; cnt[j]++; } }));
   const avg = sums.map((s, j) => cnt[j] ? +(s / cnt[j] / 1000).toFixed(2) : null);
   chTrSeg = new Chart($("#tr-chart-seg"), { type: "line", data: { labels: avg.map((_, j) => `区間${j + 1}`), datasets: [{ label: "位置別平均(秒)", data: avg, borderColor: "#9b59b6", backgroundColor: "#9b59b622", tension: 0.2, pointRadius: 5, fill: true }] }, options: chartOpts("秒（小さいほど速い）") });
+}
+function trAvgN(a) { return a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0; }
+// 各本の「前半区間平均」と「後半区間平均」の差（後半−前半, ms）
+function trSplitDiffs(reps) {
+  const out = [];
+  reps.forEach((r) => {
+    const segs = trSegTimes(r);
+    if (segs.length < 2) return;
+    const h = Math.floor(segs.length / 2);
+    out.push(trAvgN(segs.slice(segs.length - h)) - trAvgN(segs.slice(0, h)));
+  });
+  return out;
+}
+function trSplitNote(reps) {
+  const diffs = trSplitDiffs(reps);
+  if (!diffs.length) return "";
+  const avgDiff = trAvgN(diffs);
+  let note;
+  if (avgDiff > 30) note = `1本の中で後半が前半より平均 +${fmt(Math.round(avgDiff))} 遅く、前半に入りすぎる傾向です。`;
+  else if (avgDiff < -30) note = `後半の方が平均 ${fmt(Math.round(-avgDiff))} 速い、よいネガティブスプリットです。`;
+  else note = "1本の中で前後半のペースがよく揃っています。";
+  if (diffs.length >= 4) {
+    const k = Math.floor(diffs.length / 2);
+    const early = trAvgN(diffs.slice(0, k)), late = trAvgN(diffs.slice(diffs.length - k));
+    if (late - early > 50) note += " 本数が進むほど後半の落ちが大きくなっています。";
+    else if (early - late > 50) note += " 後半の本ほど終盤を持ち直せています。";
+  }
+  return note;
+}
+function trDrawSegTrendChart(reps, lpr) {
+  if (!window.Chart) return;
+  const labels = reps.map((x) => x.repNo + "本");
+  const datasets = [];
+  for (let k = 0; k < lpr; k++) {
+    datasets.push({ label: `区間${k + 1}`, data: reps.map((r) => { const s = trSegTimes(r); return s[k] != null ? +(s[k] / 1000).toFixed(2) : null; }), borderColor: TR_SET_PALETTE[k % TR_SET_PALETTE.length], backgroundColor: "transparent", tension: 0.2, pointRadius: 4, fill: false });
+  }
+  chTrSegTrend = new Chart($("#tr-chart-segtrend"), { type: "line", data: { labels, datasets }, options: chartOpts("秒（小さいほど速い）") });
+}
+function trDrawSetSegChart(recs, lpr) {
+  if (!window.Chart) return;
+  const labels = Array.from({ length: lpr }, (_, j) => `区間${j + 1}`);
+  const datasets = recs.map((r, i) => {
+    const sums = Array(lpr).fill(0), cnt = Array(lpr).fill(0);
+    (r.reps || []).forEach((rp) => trSegTimes(rp).forEach((s, j) => { if (j < lpr) { sums[j] += s; cnt[j]++; } }));
+    return { label: `第${r.setNo || i + 1}ｾｯﾄ`, data: sums.map((s, j) => cnt[j] ? +(s / cnt[j] / 1000).toFixed(2) : null), borderColor: TR_SET_PALETTE[i % TR_SET_PALETTE.length], backgroundColor: "transparent", tension: 0.2, pointRadius: 4, fill: false };
+  });
+  chTrSetSeg = new Chart($("#tr-chart-setseg"), { type: "line", data: { labels, datasets }, options: chartOpts("秒（小さいほど速い）") });
 }
 
 // ── 複数セットの詳細（セット毎の変化） ──
@@ -2013,10 +2061,12 @@ function renderTrainingMultiSet(recs) {
     <div class="sec-title">セットごとの本数比較</div>
     <div class="chart-wrap"><canvas id="tr-chart-setrep"></canvas></div>
     <p class="hint">各セットの本数ごとのタイムを重ねて比較。オレンジ破線はサークルです。</p>
+    ${lpr > 1 ? `<div class="sec-title">区間ペースのセット比較</div><div class="chart-wrap"><canvas id="tr-chart-setseg"></canvas></div><p class="hint">各区間（折り返し）の平均タイムをセット間で比較。後半区間が後のセットほど上がっていれば、終盤の失速がセットを追うごとに増えています。</p>` : ""}
     <div class="sec-title">セット別の記録</div>
     ${blocks}`;
   trDrawSetAvgChart(recs);
   trDrawSetRepChart(recs, m);
+  if (lpr > 1) trDrawSetSegChart(recs, lpr);
 }
 function trDrawSetAvgChart(recs) {
   if (!window.Chart) return;
