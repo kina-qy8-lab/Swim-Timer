@@ -1670,18 +1670,23 @@ function renderPracticeRun() {
   $("#pr-menu").innerHTML = setTag + trMenuHead(tr.menu);
   const moreSets = tr.curSet < tr.totalSets;
   const anyData = tr.sets.some((st) => st.swimmers.some((sw) => (sw.presses || []).length));
+  const setDone = s.state === "done";
   let startVisible = false, startText = "", startNext = false;
   if (s.state === "ready") { startVisible = true; startText = tr.totalSets > 1 ? `スタート（${s.setNo}/${tr.totalSets}セット）` : "スタート（発進音）"; }
-  else if (s.state === "done" && moreSets) { startVisible = true; startNext = true; startText = `スタート（${s.setNo + 1}/${tr.totalSets}セット）`; }
+  else if (setDone && moreSets) { startVisible = true; startNext = true; startText = `スタート（${s.setNo + 1}/${tr.totalSets}セット）`; }
   $("#pr-start-row").hidden = !startVisible;
   if (startVisible) { $("#btn-pr-start").textContent = startText; $("#btn-pr-start").dataset.next = startNext ? "1" : ""; }
   if (s.state === "ready" && !s.t0) $("#pr-clock").textContent = "0.00";
   $("#pr-ctrl-row").hidden = !(s.state === "running" || anyData);
   $("#btn-pr-undo").disabled = !(s.state === "running");
+  // セット完了時：そのセットのサマリーを表示し、計測カードは隠す
+  $("#pr-set-summary").hidden = !setDone;
+  $("#pr-set-summary").innerHTML = setDone ? trSetSummaryHtml(s) : "";
+  $("#pr-cards").hidden = setDone;
+  if (setDone) return;
   const lpr = trLapsPerRep(tr.menu);
   $("#pr-cards").innerHTML = s.swimmers.map((sw, si) => {
     const reps = trComputeReps(sw, tr.menu);
-    const last = reps[reps.length - 1];
     const pressDone = (sw.presses || []).length;
     const fullReps = Math.floor(pressDone / lpr);
     const done = fullReps >= tr.menu.reps;
@@ -1689,19 +1694,44 @@ function renderPracticeRun() {
     const curRep = Math.min(fullReps + 1, tr.menu.reps);
     const lapInRep = pressDone % lpr;
     const nowLabel = done ? "完了" : `${curRep}本目` + (lpr > 1 ? `　ラップ ${Math.min(lapInRep + 1, lpr)}/${lpr}` : "");
-    let sub;
-    if (last) {
-      const cl = last.madeCircle ? `<span class="pr-ok">サークル内 余裕${fmtCd(last.restMs)}s</span>` : `<span class="pr-late">サークル遅れ</span>`;
-      sub = `前本 <b>${fmt(last.timeMs)}</b>　落ち幅 <b class="${(last.dropMs || 0) > 0 ? "pr-up" : "pr-down"}">${fmtDrop(last.dropMs)}</b>　${cl}`;
-      if (lpr > 1) sub += `<div class="pr-laps">${trSegHtml(last)}</div>`;
-    } else sub = "スタート前";
+    // 履歴（新しい順・上から。入りきらない古い記録は下で見えなくなる）
+    const hist = reps.slice().reverse().map((r) => {
+      const dr = r.dropMs == null ? "" : `<span class="ph-dr ${r.dropMs > 0 ? "pr-up" : "pr-down"}">${fmtDrop(r.dropMs)}</span>`;
+      const ci = r.madeCircle ? `<span class="ph-ci ok">◯${fmtCd(r.restMs)}</span>` : `<span class="ph-ci late">×遅</span>`;
+      const laps = lpr > 1 ? `<div class="ph-laps">${trSegHtml(r)}</div>` : "";
+      return `<div class="ph-row${r.madeCircle ? "" : " late"}"><div class="ph-line"><span class="ph-no">${r.repNo}</span><span class="ph-tm">${fmt(r.timeMs)}</span>${dr}${ci}</div>${laps}</div>`;
+    }).join("");
     return `<div class="pr-card${done ? " done" : ""}" data-pr-si="${si}">
-      <div class="pr-top"><span class="pr-name">${escapeHtml(sw.name)}</span><span class="pr-rem">${done ? "完了" : "残り " + remaining + "本"}</span></div>
-      <div class="pr-now" id="pr-now-${si}">${nowLabel}</div>
-      <div class="pr-live" id="pr-live-${si}">—</div>
-      <div class="pr-sub">${sub}</div>
+      <div class="pr-btn">
+        <div class="pr-top"><span class="pr-name">${escapeHtml(sw.name)}</span><span class="pr-rem">${done ? "完了" : "残り " + remaining + "本"}</span></div>
+        <div class="pr-now" id="pr-now-${si}">${nowLabel}</div>
+        <div class="pr-live" id="pr-live-${si}">—</div>
+      </div>
+      <div class="pr-hist" id="pr-hist-${si}">${hist || `<div class="ph-empty">スタート前</div>`}</div>
     </div>`;
   }).join("");
+}
+// 1選手分のサマリーHTML（確認画面とセット完了サマリーで共用）
+function trSwSummaryHtml(name, reps, lpr, setLbl) {
+  const times = reps.map((r) => r.timeMs);
+  const avg = times.reduce((a, b) => a + b, 0) / times.length;
+  const rows = reps.map((r) => {
+    let row = `<div class="prv-row${r.madeCircle ? "" : " late"}"><span class="i">${r.repNo}</span><span class="tm">${fmt(r.timeMs)}</span><span class="dr">${fmtDrop(r.dropMs)}</span><span class="ci">${r.madeCircle ? "◯ 余裕" + fmtCd(r.restMs) + "s" : "× 遅れ"}</span></div>`;
+    if (lpr > 1) row += `<div class="prv-laps">${trSegHtml(r)}</div>`;
+    return row;
+  }).join("");
+  return `<div class="prv-sw"><div class="prv-h"><b>${escapeHtml(name)}</b>${setLbl || ""}<span>平均 ${fmt(avg)}・${reps.length}本</span></div><div class="prv-cap"><span>本</span><span>タイム</span><span>落ち幅</span><span>サークル</span></div>${rows}</div>`;
+}
+// セット完了サマリー（計測画面内）
+function trSetSummaryHtml(setEntry) {
+  const lpr = trLapsPerRep(tr.menu);
+  const blocks = setEntry.swimmers.map((sw) => {
+    const reps = trComputeReps(sw, tr.menu);
+    return reps.length ? trSwSummaryHtml(sw.name, reps, lpr, "") : "";
+  }).filter(Boolean).join("");
+  if (!blocks) return "";
+  const title = tr.totalSets > 1 ? `第${setEntry.setNo}セットの記録` : "計測結果";
+  return `<div class="pr-sum-title">${title}</div>${blocks}`;
 }
 function tickPractice() {
   if (!tr || !$("#screen-practice-run") || $("#screen-practice-run").hidden) return;
@@ -1740,15 +1770,8 @@ function renderPracticeReview() {
   const lpr = trLapsPerRep(tr.menu);
   const multi = tr.totalSets > 1;
   $("#prv-body").innerHTML = trReview.map(({ setNo, sw, reps }) => {
-    const times = reps.map((r) => r.timeMs);
-    const avg = times.reduce((a, b) => a + b, 0) / times.length;
-    const rows = reps.map((r) => {
-      let row = `<div class="prv-row${r.madeCircle ? "" : " late"}"><span class="i">${r.repNo}</span><span class="tm">${fmt(r.timeMs)}</span><span class="dr">${fmtDrop(r.dropMs)}</span><span class="ci">${r.madeCircle ? "◯ 余裕" + fmtCd(r.restMs) + "s" : "× 遅れ"}</span></div>`;
-      if (lpr > 1) row += `<div class="prv-laps">${trSegHtml(r)}</div>`;
-      return row;
-    }).join("");
     const setLbl = multi ? `<span class="prv-set">第${setNo}セット</span>` : "";
-    return `<div class="prv-sw"><div class="prv-h"><b>${escapeHtml(sw.name)}</b>${setLbl}<span>平均 ${fmt(avg)}・${reps.length}本</span></div><div class="prv-cap"><span>本</span><span>タイム</span><span>落ち幅</span><span>サークル</span></div>${rows}</div>`;
+    return trSwSummaryHtml(sw.name, reps, lpr, setLbl);
   }).join("");
 }
 function trSave() {
